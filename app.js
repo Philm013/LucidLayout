@@ -1378,39 +1378,45 @@ function resolveFlowInsertionForCell(index, event) {
 }
 
 function resolveFlowInsertionForGap(event) {
-  const canvasRect = els.canvasStage?.getBoundingClientRect?.();
-  if (!canvasRect || !state.grid.length || state.cols < 1) {
+  const gridRect = els.grid?.getBoundingClientRect?.();
+  if (!gridRect || !state.grid.length || state.cols < 1 || state.rows < 1) {
     return null;
   }
-  const cellWidth = (canvasRect.width - (state.cols - 1) * state.gapX) / Math.max(1, state.cols);
-  const cellHeight = (canvasRect.height - Math.ceil(state.grid.length / state.cols - 1) * state.gapY) / Math.max(1, Math.ceil(state.grid.length / state.cols));
-  if (cellWidth <= 0 || cellHeight <= 0) return null;
+  const metrics = getLayoutMetrics();
+  const scaleX = gridRect.width / Math.max(1, metrics.width);
+  const scaleY = gridRect.height / Math.max(1, metrics.height);
+  const cellWidth = metrics.cellWidth * scaleX;
+  const cellHeight = metrics.cellHeight * scaleY;
+  const gapX = state.gapX * scaleX;
+  const gapY = state.gapY * scaleY;
+  const strideX = cellWidth + gapX;
+  const strideY = cellHeight + gapY;
+  if (cellWidth <= 0 || cellHeight <= 0 || strideX <= 0 || strideY <= 0) return null;
 
-  const relX = event.clientX - canvasRect.left - state.panX;
-  const relY = event.clientY - canvasRect.top - state.panY;
-  const col = Math.floor(relX / (cellWidth + state.gapX));
-  const row = Math.floor(relY / (cellHeight + state.gapY));
-  if (col < 0 || col >= state.cols || row < 0) return null;
+  const relX = event.clientX - gridRect.left;
+  const relY = event.clientY - gridRect.top;
+  if (relX < 0 || relX > gridRect.width || relY < 0 || relY > gridRect.height) return null;
 
-  const cellIndex = row * state.cols + col;
-  if (cellIndex >= state.grid.length) return null;
+  const row = Math.floor(relY / strideY);
+  if (row < 0 || row >= state.rows) return null;
 
-  const cellX = col * (cellWidth + state.gapX);
-  const cellY = row * (cellHeight + state.gapY);
-  const localX = relX - cellX;
-  const localY = relY - cellY;
+  const localY = relY - row * strideY;
+  if (localY < 0 || localY > cellHeight) {
+    return null;
+  }
 
-  const useHorizontalAxis = state.cols > 1;
-  const axisSize = useHorizontalAxis ? cellWidth : cellHeight;
-  const ratio = useHorizontalAxis ? localX / Math.max(1, cellWidth) : localY / Math.max(1, cellHeight);
-  const edgeBandPx = clamp(axisSize * 0.16, 10, 22);
-  const edgeRatio = edgeBandPx / Math.max(1, axisSize);
-  const nearBetween = ratio <= edgeRatio || ratio >= (1 - edgeRatio);
-  if (!nearBetween) return null;
+  const col = Math.floor(relX / strideX);
+  if (col < 0 || col >= Math.max(1, state.cols - 1)) return null;
 
-  const placement = ratio >= 0.5 ? 'after' : 'before';
-  const insertionIndex = placement === 'before' ? cellIndex : Math.min(cellIndex + 1, state.grid.length);
-  return { targetIndex: cellIndex, insertionIndex, placement, nearBetween: true };
+  const localX = relX - col * strideX;
+  if (localX < cellWidth || localX > strideX) {
+    return null;
+  }
+
+  const targetIndex = row * state.cols + col;
+  const placement = 'after';
+  const insertionIndex = Math.min(targetIndex + 1, state.grid.length);
+  return { targetIndex, insertionIndex, placement, nearBetween: true };
 }
 
 function placeGroupInFlow(slotIndices, targetIndex) {
@@ -3111,7 +3117,8 @@ function bindCanvasInteractions() {
     if (!state.dragPayload || isFileDrag(event)) return;
     event.preventDefault();
     maybeExpandGridForDragHover(event);
-    if ((state.dragPayload?.type === 'slot' || state.dragPayload?.type === 'group') && !event.target.classList?.contains('grid-cell')) {
+    const hoveredCell = event.target instanceof Element ? event.target.closest('.grid-cell') : null;
+    if ((state.dragPayload?.type === 'slot' || state.dragPayload?.type === 'group') && !hoveredCell) {
       const gap = resolveFlowInsertionForGap(event);
       if (gap) {
         clearFlowPreview();
@@ -3123,11 +3130,12 @@ function bindCanvasInteractions() {
 
   els.canvasViewport.addEventListener('drop', event => {
     if (isFileDrag(event)) return;
+    const hoveredCell = event.target instanceof Element ? event.target.closest('.grid-cell') : null;
     const flowPreview = state.flowPreview;
     clearFlowPreview();
     
     // Handle gap-based insertion (from dragover on canvas)
-    if (flowPreview?.nearBetween && !event.target.classList?.contains('grid-cell')) {
+    if (flowPreview?.nearBetween && !hoveredCell) {
       if (state.dragPayload?.type === 'slot') {
         const targetRow = Math.floor(flowPreview.targetIndex / state.cols);
         const insertCol = clamp(flowPreview.insertionIndex - targetRow * state.cols, 0, state.cols);
