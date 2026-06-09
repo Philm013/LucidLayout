@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#0c1320">
+  <title>PNG Grid</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <main class="workspace">
+      <aside id="controlsPanel" class="panel controls-panel">
+        <div class="panel-header controls-header">
+          <div>
+            <h2>Controls</h2>
+            <p class="hint">Edit, prune rows/columns, and stage removed images for re-placement.</p>
+          </div>
+          <div class="panel-header-actions">
+            <button id="toggleControlsBtn" class="mini-button icon-menu-btn controls-inline-toggle" type="button" aria-expanded="true" aria-controls="controlsPanel" aria-label="Hide controls" title="Hide controls">☰</button>
+          </div>
+        </div>
+
+        <section class="panel-section controls-card">
+          <h3>Layout</h3>
+          <div class="field-grid">
+            <label class="stepper">
+              <span>Rows</span>
+              <div class="stepper-row">
+                <button id="rowsDownBtn" type="button" class="mini-button">-</button>
+                <input id="rowsInput" type="number" min="1" value="3">
+                <button id="rowsUpBtn" type="button" class="mini-button">+</button>
+              </div>
+            </label>
+            <label class="stepper">
+              <span>Columns</span>
+              <div class="stepper-row">
+                <button id="colsDownBtn" type="button" class="mini-button">-</button>
+                <input id="colsInput" type="number" min="1" value="3">
+                <button id="colsUpBtn" type="button" class="mini-button">+</button>
+              </div>
+            </label>
+            <label><span>Horizontal Gap <span id="gapXLabel" class="size-label">medium</span></span><input id="gapXInput" type="range" min="0" max="40" value="12" class="slider"></label>
+            <label><span>Vertical Gap <span id="gapYLabel" class="size-label">medium</span></span><input id="gapYInput" type="range" min="0" max="40" value="12" class="slider"></label>
+            <label><span>Cell Width <span id="cellWidthLabel" class="size-label">medium</span></span><input id="cellWidthInput" type="range" min="40" max="300" value="160" class="slider"></label>
+            <label><span>Cell Height <span id="cellHeightLabel" class="size-label">medium</span></span><input id="cellHeightInput" type="range" min="40" max="300" value="120" class="slider"></label>
+          </div>
+        </section>
+
+        <section class="panel-section controls-card">
+          <h3>Grid actions</h3>
+          <div class="stacked-actions">
+            <button id="autoPackBtn" class="button" type="button">Auto pack grid</button>
+            <button id="shuffleBtn" class="button" type="button">Shuffle layout</button>
+            <button id="clearGridBtn" class="button" type="button">Clear and Reset Grid</button>
+          </div>
+        </section>
+
+      </aside>
+
+      <section class="editor-stack">
+        <section class="panel grid-panel">
+          <div class="panel-header canvas-header">
+            <div class="canvas-heading">
+              <button id="revealControlsBtn" class="mini-button icon-menu-btn reveal-controls-btn" type="button" aria-expanded="false" aria-controls="controlsPanel" aria-label="Show controls" title="Show controls">☰</button>
+              <h2>Editable grid</h2>
+            </div>
+            <div class="canvas-controls" aria-label="Canvas controls">
+              <button id="zoomOutBtn" class="mini-button" type="button" title="Zoom out" aria-label="Zoom out">-</button>
+              <span id="zoomLabel" class="zoom-label">100%</span>
+              <button id="zoomInBtn" class="mini-button" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+              <button id="resetViewBtn" class="button" type="button">Reset view</button>
+              <button id="fitViewBtn" class="button" type="button">Fit canvas</button>
+              <div class="menu-wrap">
+                <button id="importMenuBtn" class="button button-primary" type="button" aria-haspopup="true" aria-expanded="false">Import ▾</button>
+                <div id="importMenu" class="menu-pop menu-pop-right" hidden>
+                    <button id="importFolderBtn" class="menu-item" type="button">Load folder</button>
+                    <button id="importFilesBtn" class="menu-item" type="button">Add files</button>
+                </div>
+                <button id="exportMenuBtn" class="button button-primary" type="button" aria-haspopup="true" aria-expanded="false">Export ▾</button>
+                <div id="exportMenu" class="menu-pop menu-pop-right" hidden>
+                  <button id="copyLucidBtn" class="menu-item" type="button">Copy for Lucidchart</button>
+                  <button id="copyPngBtn" class="menu-item" type="button">Copy preview PNG</button>
+                  <button id="downloadPngBtn" class="menu-item" type="button">Download PNG preview</button>
+                </div>
+              </div>
+              <button id="undoBtn" class="button" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">↶ Undo</button>
+              <button id="redoBtn" class="button" type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷ Redo</button>
+              <button id="historyBtn" class="button" type="button" title="View history" aria-label="View history" aria-haspopup="dialog">⏱ History</button>
+            </div>
+          </div>
+          <p class="hint canvas-hint">Scroll to zoom. Drag empty canvas space to pan. Cell actions appear on hover.</p>
+          <div id="canvasViewport" class="canvas-viewport" aria-label="Grid canvas viewport" aria-describedby="dragExpandStatus">
+            <div id="canvasStage" class="canvas-stage">
+              <div id="grid" class="grid" aria-label="Editable image grid"></div>
+            </div>
+          </div>
+          <button id="toggleTrayBtn" class="tray-handle-btn" type="button" title="Toggle image tray" aria-expanded="false" aria-controls="imageTrayPanel" aria-label="Toggle image tray">
+            <span class="tray-handle-icon">📦</span>
+            <span class="tray-handle-label">Image Tray</span>
+            <span id="holdingCountHandle" class="chip tray-handle-chip">0 staged</span>
+            <span class="tray-handle-chevron">▲</span>
+          </button>
+          <div id="imageTrayPanel" class="image-tray-panel collapsed">
+            <div class="tray-panel-header">
+              <h3>Image Tray</h3>
+              <span id="holdingCount" class="chip">0 staged</span>
+              <button id="clearTrayBtn" class="mini-button" type="button" title="Permanently remove all staged images">Clear tray</button>
+            </div>
+            <div id="holdingTray" class="holding-tray" aria-label="Staged images tray"></div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <p id="dragExpandStatus" class="sr-only" role="status" aria-live="polite">Drag an image near a canvas edge to expand.</p>
+
+    <canvas id="previewCanvas" class="hidden-canvas" width="1280" height="720" aria-hidden="true"></canvas>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="dropCurtain" class="drop-curtain" aria-hidden="true">Drop files or folders to import</div>
+
+  <div id="overflowModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="overflowTitle">
+      <h3 id="overflowTitle">More Images Than Grid Spaces</h3>
+      <p class="hint" id="overflowMessage"></p>
+      <div class="field-grid">
+        <label><span>Width (columns)</span><input id="overflowColsInput" type="number" min="1" value="3"></label>
+        <label><span>Height (rows)</span><input id="overflowRowsInput" type="number" min="1" value="3"></label>
+      </div>
+      <p class="hint" id="overflowRecommendation"></p>
+      <div class="modal-actions">
+        <button id="overflowApplyBtn" class="button button-primary" type="button">Apply Size</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="importModeModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="importModeTitle">
+      <h3 id="importModeTitle">How should new images be added?</h3>
+      <p class="hint" id="importModeMessage"></p>
+      <p class="hint" id="importExistingNotice"></p>
+      <div class="stacked-actions">
+        <button id="importReplaceBtn" class="button" type="button">Replace current grid</button>
+        <button id="importFillBtn" class="button" type="button">Fill available gaps</button>
+        <button id="importAppendStartBtn" class="button" type="button">Append at beginning</button>
+        <button id="importAppendSelectedBtn" class="button" type="button">Select spot to append at</button>
+        <button id="importTrayBtn" class="button" type="button">Add to Image Tray</button>
+      </div>
+      <p class="hint">Tip: click a cell to mark selected slot before import.</p>
+    </div>
+  </div>
+
+    <div id="previewModal" class="modal-backdrop" aria-hidden="true">
+      <div class="modal-card preview-modal-card" role="dialog" aria-modal="true" aria-labelledby="previewModalTitle">
+        <div class="preview-modal-header">
+          <div>
+            <h3 id="previewModalTitle">Image preview</h3>
+            <p class="hint" id="previewModalCaption"></p>
+          </div>
+          <span id="previewModalCounter" class="preview-modal-counter">1 / 1</span>
+        </div>
+        <div class="preview-image-shell">
+          <img id="previewModalImage" alt="" draggable="false">
+        </div>
+        <div class="preview-modal-actions">
+          <button id="previewPrevBtn" class="button" type="button">Previous</button>
+          <button id="previewCloseBtn" class="button" type="button">Close</button>
+          <button id="previewNextBtn" class="button button-primary" type="button">Next</button>
+        </div>
+      </div>
+    </div>
+
+  <div id="historyModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card history-modal-card" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle">
+      <div class="modal-header">
+        <div>
+          <h3 id="historyModalTitle">History Navigator</h3>
+          <p class="hint">Click any checkpoint to jump to that state. Newest on the right.</p>
+        </div>
+      </div>
+      <div id="historyTimeline" class="history-timeline"></div>
+      <div class="modal-actions">
+        <button id="historyClearBtn" class="button" type="button">Clear history</button>
+        <button id="historyCloseBtn" class="button button-primary" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
