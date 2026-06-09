@@ -441,6 +441,11 @@ select {
   padding: calc(7px * var(--ui-scale)) calc(9px * var(--ui-scale));
 }
 
+select option {
+  color: #0c1320;
+  background: #f2fbff;
+}
+
 input[type="number"] {
   appearance: textfield;
 }
@@ -758,6 +763,12 @@ input[type="number"]::-webkit-inner-spin-button {
   outline: 2px solid var(--accent);
 }
 
+.grid-cell.drag-over.swap-mode {
+  outline: 2px solid rgba(134, 242, 190, 0.9);
+  background: rgba(134, 242, 190, 0.1);
+  box-shadow: 0 0 18px rgba(134, 242, 190, 0.25) inset;
+}
+
 .grid-cell.selected {
   outline: 2px solid rgba(134, 242, 190, 0.95);
   box-shadow: 0 0 0 1px rgba(134, 242, 190, 0.35) inset;
@@ -772,12 +783,12 @@ input[type="number"]::-webkit-inner-spin-button {
 .grid-cell.flow-insert-after::after {
   content: "";
   position: absolute;
-  top: 8px;
-  bottom: 30px;
-  width: 3px;
+  top: 4px;
+  bottom: 4px;
+  width: 5px;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(95, 211, 255, 0.95), rgba(134, 242, 190, 0.95));
-  box-shadow: 0 0 10px rgba(95, 211, 255, 0.45);
+  background: linear-gradient(180deg, rgba(95, 211, 255, 1), rgba(134, 242, 190, 1));
+  box-shadow: 0 0 0 3px rgba(95, 211, 255, 0.28), 0 0 18px 4px rgba(95, 211, 255, 0.65);
   pointer-events: none;
   z-index: 3;
 }
@@ -789,6 +800,28 @@ input[type="number"]::-webkit-inner-spin-button {
 .grid-cell.flow-insert-after::after {
   right: 2px;
 }
+
+  .grid-insert-line {
+    position: absolute;
+    width: 4px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(95, 211, 255, 1), rgba(134, 242, 190, 1));
+    box-shadow: 0 0 0 4px rgba(95, 211, 255, 0.22), 0 0 22px 6px rgba(95, 211, 255, 0.6);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .grid-insert-line.hidden {
+    display: none;
+  }
+
+  .grid-cell.shift-preview-right,
+  .grid-cell.shift-preview-right:hover,
+  .grid-cell.shift-preview-right:focus-visible {
+    transform: translateX(10px);
+    box-shadow: -6px 0 18px rgba(95, 211, 255, 0.18) inset;
+    border-color: rgba(95, 211, 255, 0.45);
+  }
 
 .edge-remove-btn {
   position: absolute;
@@ -919,6 +952,38 @@ input[type="number"]::-webkit-inner-spin-button {
   height: 1px;
   opacity: 0;
   pointer-events: none;
+}
+
+.drag-tooltip {
+  position: fixed;
+  pointer-events: none;
+  z-index: 100;
+  padding: 5px 11px;
+  border-radius: 8px;
+  background: rgba(8, 17, 30, 0.96);
+  border: 1px solid rgba(95, 211, 255, 0.55);
+  color: #5fd3ff;
+  font-size: calc(11px * var(--ui-scale));
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  transition: none;
+}
+
+.drag-tooltip.hidden {
+  display: none;
+}
+
+.drag-tooltip.mode-swap {
+  border-color: rgba(134, 242, 190, 0.65);
+  color: #86f2be;
+}
+
+.drag-tooltip.mode-insert {
+  border-color: rgba(95, 211, 255, 0.65);
+  color: #5fd3ff;
 }
 
 .sr-only {

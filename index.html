@@ -124,6 +124,8 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <div id="dragTooltip" class="drag-tooltip hidden" aria-hidden="true"></div>
+
   <div id="dropCurtain" class="drop-curtain" aria-hidden="true">Drop files or folders to import</div>
 
   <div id="overflowModal" class="modal-backdrop" aria-hidden="true">
@@ -154,6 +156,44 @@
         <button id="importTrayBtn" class="button" type="button">Add to Image Tray</button>
       </div>
       <p class="hint">Tip: click a cell to mark selected slot before import.</p>
+    </div>
+  </div>
+
+  <div id="replaceOptionsModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="replaceOptionsTitle">
+      <h3 id="replaceOptionsTitle">Replace Grid Options</h3>
+      <p class="hint" id="replaceModeMessage"></p>
+      <div class="field-grid">
+        <label>
+          <span>Start column in first row</span>
+          <select id="replaceOffsetSelect"></select>
+        </label>
+        <label>
+          <span>Grid sizing mode</span>
+          <select id="replaceSizingSelect">
+            <option value="recommended">Recommended (close to square)</option>
+            <option value="current-cols">Keep current columns</option>
+            <option value="current-rows">Keep current rows</option>
+            <option value="keep-current">Keep current grid size</option>
+            <option value="custom">Custom rows and columns</option>
+          </select>
+        </label>
+        <label>
+          <span>Rows</span>
+          <select id="replaceRowsSelect"></select>
+        </label>
+        <label>
+          <span>Columns</span>
+          <select id="replaceColsSelect"></select>
+        </label>
+      </div>
+      <p class="hint" id="replaceOffsetHint"></p>
+      <p class="hint" id="replaceModeRecommendation"></p>
+      <p class="hint" id="replaceModeMinimums"></p>
+      <div class="modal-actions">
+        <button id="replaceCancelBtn" class="button" type="button">Cancel</button>
+        <button id="replaceApplyBtn" class="button button-primary" type="button">Replace grid</button>
+      </div>
     </div>
   </div>
 

@@ -28,8 +28,10 @@ const state = {
   isPanning: false,
   selectedSlotIndex: null,
   pendingImportFiles: null,
+  pendingReplaceFiles: null,
   awaitingAppendSelection: false,
   pendingGridSequence: null,
+  pendingGridPlacementOffset: 0,
   dragPayload: null,
   dropDepth: 0,
   lastDragExpandAt: 0,
@@ -291,6 +293,19 @@ function showToast(message) {
   toastTimer = setTimeout(() => {
     els.toast.classList.remove('show');
   }, 2200);
+}
+
+function showDragTooltip(clientX, clientY, mode, text) {
+  if (!els.dragTooltip) return;
+  els.dragTooltip.textContent = text;
+  els.dragTooltip.className = `drag-tooltip mode-${mode}`;
+  els.dragTooltip.style.left = `${clientX + 16}px`;
+  els.dragTooltip.style.top = `${clientY - 36}px`;
+}
+
+function hideDragTooltip() {
+  if (!els.dragTooltip) return;
+  els.dragTooltip.className = 'drag-tooltip hidden';
 }
 
 function confirmAction(message) {
@@ -814,18 +829,71 @@ function ensureGridShape() {
   resizeGridPreserve(state.rows, state.cols);
 }
 
-function recommendedDims(count) {
-  const cols = Math.ceil(Math.sqrt(count));
-  const rows = Math.ceil(count / cols);
+function normalizeFirstRowOffset(offset, cols) {
+  const safeCols = Math.max(1, Number(cols) || 1);
+  return clamp(Number(offset) || 0, 0, Math.max(0, safeCols - 1));
+}
+
+function capacityForDims(rows, cols, firstRowOffset = 0) {
+  const safeRows = Math.max(0, Number(rows) || 0);
+  const safeCols = Math.max(1, Number(cols) || 1);
+  const offset = normalizeFirstRowOffset(firstRowOffset, safeCols);
+  if (safeRows <= 0) return 0;
+  const firstRowCapacity = Math.max(0, safeCols - offset);
+  if (safeRows === 1) return firstRowCapacity;
+  return firstRowCapacity + (safeRows - 1) * safeCols;
+}
+
+function recommendedDims(count, firstRowOffset = 0) {
+  if (count <= 0) return { rows: 1, cols: 1 };
+  let best = null;
+  const minCols = Math.min(GRID_LIMIT, Math.max(1, Number(firstRowOffset) + 1));
+
+  for (let cols = minCols; cols <= GRID_LIMIT; cols += 1) {
+    const rows = minRowsForCols(cols, count, firstRowOffset);
+    if (rows < 1 || rows > GRID_LIMIT) continue;
+    const area = rows * cols;
+    const aspectDelta = Math.abs(rows - cols);
+    const score = area * 100 + aspectDelta;
+    if (!best || score < best.score) {
+      best = { rows, cols, score };
+    }
+  }
+
+  if (!best) {
+    return { rows: GRID_LIMIT, cols: GRID_LIMIT };
+  }
+
+  const rows = best.rows;
+  const cols = best.cols;
   return { rows, cols };
 }
 
-function minRowsForCols(cols, count) {
-  return Math.ceil(count / Math.max(1, cols));
+function minRowsForCols(cols, count, firstRowOffset = 0) {
+  const minCols = Math.max(1, Number(firstRowOffset) + 1);
+  const safeCols = Math.max(minCols, Number(cols) || 1);
+  const remaining = Math.max(0, Number(count) || 0);
+  if (remaining === 0) return 1;
+
+  const offset = normalizeFirstRowOffset(firstRowOffset, safeCols);
+  const firstRowCapacity = Math.max(0, safeCols - offset);
+  if (remaining <= firstRowCapacity) return 1;
+  return 1 + Math.ceil((remaining - firstRowCapacity) / safeCols);
 }
 
-function minColsForRows(rows, count) {
-  return Math.ceil(count / Math.max(1, rows));
+function minColsForRows(rows, count, firstRowOffset = 0) {
+  const safeRows = Math.max(1, Number(rows) || 1);
+  const required = Math.max(0, Number(count) || 0);
+  if (required === 0) return 1;
+  const minCols = Math.min(GRID_LIMIT, Math.max(1, Number(firstRowOffset) + 1));
+
+  for (let cols = minCols; cols <= GRID_LIMIT; cols += 1) {
+    if (capacityForDims(safeRows, cols, firstRowOffset) >= required) {
+      return cols;
+    }
+  }
+
+  return GRID_LIMIT;
 }
 
 function allAssignedIds(gridValues) {
@@ -926,18 +994,23 @@ function normalizeGridReferences() {
   state.grid = state.grid.map(assetId => (assetId && validIds.has(assetId) ? assetId : null));
 }
 
-function placeSequenceInGrid(sequence) {
+function placeSequenceInGrid(sequence, firstRowOffset = 0) {
   const next = new Array(state.rows * state.cols).fill(null);
-  for (let i = 0; i < Math.min(next.length, sequence.length); i += 1) {
-    next[i] = sequence[i];
+  const startIndex = normalizeFirstRowOffset(firstRowOffset, state.cols);
+  const placeable = Math.max(0, next.length - startIndex);
+  const count = Math.min(placeable, sequence.length);
+  for (let i = 0; i < count; i += 1) {
+    next[startIndex + i] = sequence[i];
   }
   state.grid = next;
 }
 
-function queueOverflowSequence(sequence) {
+function queueOverflowSequence(sequence, options = {}) {
+  const firstRowOffset = normalizeFirstRowOffset(options.firstRowOffset || 0, state.cols);
   state.pendingGridSequence = sequence.slice();
-  placeSequenceInGrid(sequence);
-  openOverflowModal(sequence.length);
+  state.pendingGridPlacementOffset = firstRowOffset;
+  placeSequenceInGrid(sequence, firstRowOffset);
+  openOverflowModal(sequence.length, firstRowOffset);
 }
 
 function fillUnplacedIntoEmpty() {
@@ -1223,11 +1296,55 @@ function getActiveDragSlots(startIndex) {
 
 function clearFlowPreview() {
   state.flowPreview = null;
+  hideDragTooltip();
   if (!els.grid) return;
-  els.grid.querySelectorAll('.flow-insert-before, .flow-insert-after').forEach(node => {
-    node.classList.remove('flow-insert-before', 'flow-insert-after');
+    const existingLine = els.grid.querySelector('.grid-insert-line');
+    if (existingLine) existingLine.classList.add('hidden');
+    els.grid.querySelectorAll('.flow-insert-before, .flow-insert-after, .swap-mode, .shift-preview-right').forEach(node => {
+      node.classList.remove('flow-insert-before', 'flow-insert-after', 'swap-mode', 'shift-preview-right');
   });
 }
+
+  function updateInsertPreview(targetIndex, placement) {
+    if (!els.grid) return;
+    const metrics = getLayoutMetrics();
+    const row = Math.floor(targetIndex / state.cols);
+    const col = targetIndex % state.cols;
+    const insertCol = placement === 'before' ? col : col + 1;
+
+    els.grid.querySelectorAll('.shift-preview-right').forEach(el => el.classList.remove('shift-preview-right'));
+    els.grid.querySelectorAll('.grid-cell').forEach(cellEl => {
+      const cellIndex = parseInt(cellEl.dataset.index, 10);
+      if (isNaN(cellIndex)) return;
+      const cellRow = Math.floor(cellIndex / state.cols);
+      const cellCol = cellIndex % state.cols;
+      if (cellRow === row && cellCol >= insertCol && state.grid[cellIndex]) {
+        cellEl.classList.add('shift-preview-right');
+      }
+    });
+
+    const line = els.grid.querySelector('.grid-insert-line');
+    if (!line) return;
+
+    let lineX;
+    if (insertCol <= 0) {
+      lineX = -2;
+    } else if (insertCol >= state.cols) {
+      lineX = metrics.width - 2;
+    } else if (state.gapX <= 0) {
+      lineX = insertCol * metrics.cellWidth - 2;
+    } else {
+      const rightOfPrev = (insertCol - 1) * (metrics.cellWidth + state.gapX) + metrics.cellWidth;
+      const leftOfNext = insertCol * (metrics.cellWidth + state.gapX);
+      lineX = (rightOfPrev + leftOfNext) / 2 - 2;
+    }
+
+    const rowY = row * (metrics.cellHeight + state.gapY);
+    line.style.left = `${(lineX / Math.max(1, metrics.width)) * 100}%`;
+    line.style.top = `${(rowY / Math.max(1, metrics.height)) * 100}%`;
+    line.style.height = `${(metrics.cellHeight / Math.max(1, metrics.height)) * 100}%`;
+    line.classList.remove('hidden');
+  }
 
 function resolveFlowInsertionForCell(index, event) {
   const target = event.currentTarget;
@@ -1241,20 +1358,59 @@ function resolveFlowInsertionForCell(index, event) {
   }
 
   const useHorizontalAxis = state.cols > 1;
+  const axisSize = useHorizontalAxis ? rect.width : rect.height;
   const ratioRaw = useHorizontalAxis
     ? (event.clientX - rect.left) / Math.max(1, rect.width)
     : (event.clientY - rect.top) / Math.max(1, rect.height);
   const ratio = clamp(ratioRaw, 0, 1);
   const placement = ratio >= 0.5 ? 'after' : 'before';
   const insertionIndex = placement === 'before' ? index : Math.min(index + 1, state.grid.length);
-  const edgeBand = 0.32;
-  const nearBetween = ratio <= edgeBand || ratio >= (1 - edgeBand);
+  // Only trigger insert/reflow when the pointer is genuinely near the cell edge.
+  const edgeBandPx = clamp(axisSize * 0.16, 10, 22);
+  const edgeRatio = edgeBandPx / Math.max(1, axisSize);
+  const nearBetween = ratio <= edgeRatio || ratio >= (1 - edgeRatio);
 
   return {
     insertionIndex,
     placement,
     nearBetween
   };
+}
+
+function resolveFlowInsertionForGap(event) {
+  const canvasRect = els.canvasStage?.getBoundingClientRect?.();
+  if (!canvasRect || !state.grid.length || state.cols < 1) {
+    return null;
+  }
+  const cellWidth = (canvasRect.width - (state.cols - 1) * state.gapX) / Math.max(1, state.cols);
+  const cellHeight = (canvasRect.height - Math.ceil(state.grid.length / state.cols - 1) * state.gapY) / Math.max(1, Math.ceil(state.grid.length / state.cols));
+  if (cellWidth <= 0 || cellHeight <= 0) return null;
+
+  const relX = event.clientX - canvasRect.left - state.panX;
+  const relY = event.clientY - canvasRect.top - state.panY;
+  const col = Math.floor(relX / (cellWidth + state.gapX));
+  const row = Math.floor(relY / (cellHeight + state.gapY));
+  if (col < 0 || col >= state.cols || row < 0) return null;
+
+  const cellIndex = row * state.cols + col;
+  if (cellIndex >= state.grid.length) return null;
+
+  const cellX = col * (cellWidth + state.gapX);
+  const cellY = row * (cellHeight + state.gapY);
+  const localX = relX - cellX;
+  const localY = relY - cellY;
+
+  const useHorizontalAxis = state.cols > 1;
+  const axisSize = useHorizontalAxis ? cellWidth : cellHeight;
+  const ratio = useHorizontalAxis ? localX / Math.max(1, cellWidth) : localY / Math.max(1, cellHeight);
+  const edgeBandPx = clamp(axisSize * 0.16, 10, 22);
+  const edgeRatio = edgeBandPx / Math.max(1, axisSize);
+  const nearBetween = ratio <= edgeRatio || ratio >= (1 - edgeRatio);
+  if (!nearBetween) return null;
+
+  const placement = ratio >= 0.5 ? 'after' : 'before';
+  const insertionIndex = placement === 'before' ? cellIndex : Math.min(cellIndex + 1, state.grid.length);
+  return { targetIndex: cellIndex, insertionIndex, placement, nearBetween: true };
 }
 
 function placeGroupInFlow(slotIndices, targetIndex) {
@@ -1300,6 +1456,58 @@ function placeGroupInFlow(slotIndices, targetIndex) {
   state.selectedSlotIndex = targetIndex;
   state.dragPayload = null;
   renderAll();
+  return true;
+}
+
+function placeGroupInRowFlow(slotIndices, targetRow, insertCol) {
+  const uniqueSlots = [...new Set(slotIndices)]
+    .filter(i => Number.isInteger(i) && i >= 0 && i < state.grid.length);
+  const groupAssets = uniqueSlots.map(i => state.grid[i]).filter(Boolean);
+  if (groupAssets.length === 0) return false;
+
+  const oldCols = state.cols;
+  const tempGrid = state.grid.slice();
+  for (const i of uniqueSlots) tempGrid[i] = null;
+
+  const rowStart = targetRow * oldCols;
+  const rowItems = tempGrid.slice(rowStart, rowStart + oldCols);
+  const col = clamp(insertCol, 0, oldCols);
+  // Preserve null positions — do NOT compact with filter(Boolean)
+  const leftItems = rowItems.slice(0, col);
+  const rightItems = rowItems.slice(col);
+  const newRowItems = [...leftItems, ...groupAssets, ...rightItems];
+
+  if (newRowItems.length > oldCols) {
+    const addCols = newRowItems.length - oldCols;
+    const newCols = oldCols + addCols;
+    const expandedGrid = [];
+    for (let r = 0; r < state.rows; r += 1) {
+      for (let c = 0; c < oldCols; c += 1) expandedGrid.push(tempGrid[r * oldCols + c] ?? null);
+      for (let c = 0; c < addCols; c += 1) expandedGrid.push(null);
+    }
+    state.cols = newCols;
+    state.grid = expandedGrid;
+    state.canvasWidth = Math.max(1, state.canvasWidth + addCols * (state.cellWidth + state.gapX));
+  } else {
+    state.grid = tempGrid;
+  }
+
+  const newRowStart = targetRow * state.cols;
+  const paddedRow = [...newRowItems];
+  while (paddedRow.length < state.cols) paddedRow.push(null);
+  for (let c = 0; c < state.cols; c += 1) {
+    state.grid[newRowStart + c] = paddedRow[c] ?? null;
+  }
+
+  pushHistory(`Insert into row ${targetRow + 1}`);
+  state.multiSelectedSlots = [];
+  const insertedCount = groupAssets.length;
+  for (let c = col; c < col + insertedCount && c < state.cols; c += 1) {
+    if (state.grid[newRowStart + c]) state.multiSelectedSlots.push(newRowStart + c);
+  }
+  state.dragPayload = null;
+  renderAll();
+  showToast(`Inserted into row ${targetRow + 1}`);
   return true;
 }
 
@@ -1866,8 +2074,15 @@ function createGridCell(assetId, index, frame) {
       const flow = resolveFlowInsertionForCell(index, event);
       clearFlowPreview();
       if (flow.nearBetween) {
-        const markerClass = flow.placement === 'before' ? 'flow-insert-before' : 'flow-insert-after';
-        cell.classList.add(markerClass);
+        updateInsertPreview(index, flow.placement);
+        const groupSize = state.dragPayload.type === 'group' ? state.dragPayload.slotIndices?.length || 1 : 1;
+        const tooltipText = groupSize > 1
+          ? `⇔ Insert ${groupSize} (row reflow)`
+          : '⇔ Insert (row reflow)';
+        showDragTooltip(event.clientX, event.clientY, 'insert', tooltipText);
+      } else {
+        cell.classList.add('swap-mode');
+        showDragTooltip(event.clientX, event.clientY, 'swap', '⇄ Swap');
       }
       state.flowPreview = {
         targetIndex: index,
@@ -1875,44 +2090,48 @@ function createGridCell(assetId, index, frame) {
         placement: flow.placement,
         nearBetween: flow.nearBetween
       };
+    } else if (state.dragPayload?.type === 'asset') {
+      showDragTooltip(event.clientX, event.clientY, 'insert', '+ Place here');
     }
     cell.classList.add('drag-over');
   });
 
   cell.addEventListener('dragleave', () => {
-    cell.classList.remove('drag-over');
+    cell.classList.remove('drag-over', 'swap-mode');
     cell.classList.remove('flow-insert-before', 'flow-insert-after');
   });
 
   cell.addEventListener('drop', event => {
     event.preventDefault();
     event.stopPropagation();
-    cell.classList.remove('drag-over');
+    cell.classList.remove('drag-over', 'swap-mode');
+    hideDragTooltip();
     if (!state.dragPayload) return;
     const flowPreview = state.flowPreview && state.flowPreview.targetIndex === index ? state.flowPreview : null;
 
     if (state.dragPayload.type === 'slot') {
+      clearFlowPreview();
       if (flowPreview?.nearBetween) {
-        placeGroupInFlow([state.dragPayload.slotIndex], flowPreview.insertionIndex);
+        const targetRow = Math.floor(index / state.cols);
+        const insertCol = clamp(flowPreview.insertionIndex - targetRow * state.cols, 0, state.cols);
+        finalizeAutoExpandSession(index);
+        placeGroupInRowFlow([state.dragPayload.slotIndex], targetRow, insertCol);
       } else {
         swapGridSlots(state.dragPayload.slotIndex, index);
-      }
-      clearFlowPreview();
-      const collapsed = finalizeAutoExpandSession(index);
-      if (collapsed) {
-        renderAll();
+        const collapsed = finalizeAutoExpandSession(index);
+        if (collapsed) renderAll();
       }
       return;
     }
 
     if (state.dragPayload.type === 'group') {
-      const insertionIndex = flowPreview?.nearBetween ? flowPreview.insertionIndex : index;
-      placeGroupInFlow(state.dragPayload.slotIndices || [], insertionIndex);
       clearFlowPreview();
-      const collapsed = finalizeAutoExpandSession(index);
-      if (collapsed) {
-        renderAll();
-      }
+      const targetRow = Math.floor(index / state.cols);
+      const insertCol = flowPreview?.nearBetween
+        ? clamp(flowPreview.insertionIndex - targetRow * state.cols, 0, state.cols)
+        : (index % state.cols);
+      finalizeAutoExpandSession(index);
+      placeGroupInRowFlow(state.dragPayload.slotIndices || [], targetRow, insertCol);
       return;
     }
 
@@ -1920,9 +2139,7 @@ function createGridCell(assetId, index, frame) {
       placeAssetInSlot(state.dragPayload.assetId, index);
       clearFlowPreview();
       const collapsed = finalizeAutoExpandSession(index);
-      if (collapsed) {
-        renderAll();
-      }
+      if (collapsed) renderAll();
       showToast(`Placed image into slot ${index + 1}`);
     }
   });
@@ -1982,6 +2199,9 @@ function renderGrid() {
     els.grid.appendChild(createGridCell(state.grid[index], index, frame));
   }
   createGridEdgeButtons(metrics);
+    const insertLineEl = document.createElement('div');
+    insertLineEl.className = 'grid-insert-line hidden';
+    els.grid.appendChild(insertLineEl);
   applyCanvasTransform();
 }
 
@@ -2330,13 +2550,16 @@ function clearGrid() {
   state.gapY = 12;
   state.selectedSlotIndex = null;
   state.pendingImportFiles = null;
+  state.pendingReplaceFiles = null;
   state.awaitingAppendSelection = false;
   state.pendingGridSequence = null;
+  state.pendingGridPlacementOffset = 0;
   state.holdingAssetIds = [];
   state.multiSelectedSlots = [];
   resetCanvasLayout();
   state.grid = new Array(9).fill(null);
   renderAll();
+  fitCanvasView();
   showToast('Cleared and reset grid');
 }
 
@@ -2357,11 +2580,26 @@ function applyNumberSettings() {
   let nextRows = clamp(Number(els.rowsInput.value || 1), 1, GRID_LIMIT);
   let nextCols = clamp(Number(els.colsInput.value || 1), 1, GRID_LIMIT);
   const required = state.assets.length;
+  
+  // Detect which dimension the user changed
+  const colsChanged = nextCols !== prevCols;
+  const rowsChanged = nextRows !== prevRows;
+  
   if (required > 0 && nextRows * nextCols < required) {
-    nextRows = minRowsForCols(nextCols, required);
-    if (nextRows > GRID_LIMIT) {
-      nextRows = clamp(nextRows, 1, GRID_LIMIT);
+    if (colsChanged) {
+      // User changed columns, adjust rows to fit all images
+      nextRows = minRowsForCols(nextCols, required);
+      if (nextRows > GRID_LIMIT) {
+        nextRows = clamp(nextRows, 1, GRID_LIMIT);
+        nextCols = minColsForRows(nextRows, required);
+      }
+    } else if (rowsChanged) {
+      // User changed rows, adjust columns to fit all images
       nextCols = minColsForRows(nextRows, required);
+      if (nextCols > GRID_LIMIT) {
+        nextCols = clamp(nextCols, 1, GRID_LIMIT);
+        nextRows = minRowsForCols(nextCols, required);
+      }
     }
     showToast('Layout expanded to keep all images in grid');
   }
@@ -2414,11 +2652,176 @@ function toggleMenu(menuEl, buttonEl) {
   buttonEl.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
 }
 
-function openOverflowModal(assetCount) {
-  const rec = recommendedDims(assetCount);
+function getReplaceSizingModeLabel(mode) {
+  if (mode === 'current-cols') return 'Keep current columns';
+  if (mode === 'current-rows') return 'Keep current rows';
+  if (mode === 'keep-current') return 'Keep current grid size';
+  if (mode === 'custom') return 'Custom rows and columns';
+  return 'Recommended (close to square)';
+}
+
+function resolveReplaceGridDimensions(assetCount, firstRowOffset, sizingMode = 'recommended', customRows = state.rows, customCols = state.cols) {
+  const mode = ['recommended', 'current-cols', 'current-rows', 'keep-current', 'custom'].includes(sizingMode)
+    ? sizingMode
+    : 'recommended';
+
+  let rows = mode === 'custom' ? Number(customRows) || state.rows : state.rows;
+  let cols = mode === 'custom'
+    ? Math.max(Number(customCols) || state.cols, firstRowOffset + 1)
+    : Math.max(state.cols, firstRowOffset + 1);
+
+  if (mode === 'recommended') {
+    // Get recommendation WITHOUT offset - recommend based purely on image count for square layout
+    const rec = recommendedDims(assetCount);
+    rows = rec.rows;
+    cols = Math.max(rec.cols, firstRowOffset + 1);
+  } else if (mode === 'current-cols') {
+    rows = minRowsForCols(cols, assetCount, firstRowOffset);
+  } else if (mode === 'current-rows') {
+    cols = minColsForRows(rows, assetCount, firstRowOffset);
+  }
+
+  rows = clamp(rows, 1, GRID_LIMIT);
+  cols = clamp(cols, Math.max(1, firstRowOffset + 1), GRID_LIMIT);
+
+  if (mode !== 'keep-current') {
+    if (capacityForDims(rows, cols, firstRowOffset) < assetCount) {
+      rows = minRowsForCols(cols, assetCount, firstRowOffset);
+      if (rows > GRID_LIMIT) {
+        rows = GRID_LIMIT;
+        cols = minColsForRows(rows, assetCount, firstRowOffset);
+      }
+    }
+  }
+
+  rows = clamp(rows, 1, GRID_LIMIT);
+  cols = clamp(cols, Math.max(1, firstRowOffset + 1), GRID_LIMIT);
+  return {
+    rows,
+    cols,
+    capacity: capacityForDims(rows, cols, firstRowOffset),
+    mode
+  };
+}
+
+function populateReplaceOffsetOptions() {
+  if (!els.replaceOffsetSelect) return;
+  const count = state.pendingReplaceFiles?.length || 0;
+  const sizingMode = els.replaceSizingSelect?.value || 'recommended';
+  const customCols = clamp(Number(els.replaceColsSelect?.value || state.cols), 1, GRID_LIMIT);
+  const customRows = clamp(Number(els.replaceRowsSelect?.value || state.rows), 1, GRID_LIMIT);
+  const baseDims = count > 0
+    ? resolveReplaceGridDimensions(count, 0, sizingMode, customRows, customCols)
+    : { cols: sizingMode === 'custom' ? customCols : state.cols };
+  const maxStartCol = clamp(baseDims.cols, 1, GRID_LIMIT);
+  const currentValue = clamp(Number(els.replaceOffsetSelect.value || 1), 1, maxStartCol);
+  els.replaceOffsetSelect.innerHTML = '';
+  for (let col = 1; col <= maxStartCol; col += 1) {
+    const option = document.createElement('option');
+    option.value = String(col);
+    option.textContent = `Column ${col}`;
+    els.replaceOffsetSelect.appendChild(option);
+  }
+  els.replaceOffsetSelect.value = String(currentValue);
+}
+
+function populateReplaceDimensionOptions() {
+  if (!els.replaceRowsSelect || !els.replaceColsSelect) return;
+
+  const currentRows = clamp(Number(els.replaceRowsSelect.value || state.rows), 1, GRID_LIMIT);
+  const currentCols = clamp(Number(els.replaceColsSelect.value || state.cols), 1, GRID_LIMIT);
+
+  els.replaceRowsSelect.innerHTML = '';
+  els.replaceColsSelect.innerHTML = '';
+
+  for (let i = 1; i <= GRID_LIMIT; i += 1) {
+    const rowOption = document.createElement('option');
+    rowOption.value = String(i);
+    rowOption.textContent = String(i);
+    els.replaceRowsSelect.appendChild(rowOption);
+
+    const colOption = document.createElement('option');
+    colOption.value = String(i);
+    colOption.textContent = String(i);
+    els.replaceColsSelect.appendChild(colOption);
+  }
+
+  els.replaceRowsSelect.value = String(currentRows);
+  els.replaceColsSelect.value = String(currentCols);
+}
+
+function updateReplaceOptionsSummary() {
+  const files = state.pendingReplaceFiles || [];
+  const count = files.length;
+  if (!count || !els.replaceOffsetSelect) return;
+
+  const startCol = clamp(Number(els.replaceOffsetSelect.value || 1), 1, GRID_LIMIT);
+  const sizingMode = els.replaceSizingSelect?.value || 'recommended';
+  const firstRowOffset = startCol - 1;
+  const customRows = clamp(Number(els.replaceRowsSelect?.value || state.rows), 1, GRID_LIMIT);
+  const customCols = clamp(Number(els.replaceColsSelect?.value || state.cols), 1, GRID_LIMIT);
+  const rec = recommendedDims(count, firstRowOffset);
+  const minRowsCurrentCols = minRowsForCols(Math.max(1, state.cols), count, firstRowOffset);
+  const minColsCurrentRows = minColsForRows(Math.max(1, state.rows), count, firstRowOffset);
+  const selectedDims = resolveReplaceGridDimensions(count, firstRowOffset, sizingMode, customRows, customCols);
+
+  if (els.replaceRowsSelect) {
+    els.replaceRowsSelect.value = String(selectedDims.rows);
+    els.replaceRowsSelect.disabled = sizingMode !== 'custom';
+  }
+  if (els.replaceColsSelect) {
+    els.replaceColsSelect.value = String(selectedDims.cols);
+    els.replaceColsSelect.disabled = sizingMode !== 'custom';
+  }
+
+  if (els.replaceModeMessage) {
+    els.replaceModeMessage.textContent = `${count} image${count === 1 ? '' : 's'} will replace the current grid.`;
+  }
+  if (els.replaceOffsetHint) {
+    els.replaceOffsetHint.textContent = `First row starts at column ${startCol}; columns before that stay empty.`;
+  }
+  if (els.replaceModeRecommendation) {
+    els.replaceModeRecommendation.textContent = `Suggested size with this offset: ${rec.cols} x ${rec.rows}. Selected mode (${getReplaceSizingModeLabel(sizingMode)}): ${selectedDims.cols} x ${selectedDims.rows}.`;
+  }
+  if (els.replaceModeMinimums) {
+    const overflowNote = selectedDims.capacity < count
+      ? ` ${count - selectedDims.capacity} image(s) will be staged in Image Tray due to size limits.`
+      : '';
+    els.replaceModeMinimums.textContent = `Minimums at this offset: ${minRowsCurrentCols} row(s) for current ${state.cols} column(s), or ${minColsCurrentRows} column(s) for current ${state.rows} row(s).${overflowNote}`;
+  }
+}
+
+function openReplaceOptionsModal(files) {
+  state.pendingReplaceFiles = Array.isArray(files) ? files.slice() : [];
+  const count = state.pendingReplaceFiles.length;
+  if (count === 0) return;
+
+  populateReplaceOffsetOptions();
+  populateReplaceDimensionOptions();
+  if (els.replaceOffsetSelect) {
+    els.replaceOffsetSelect.value = '1';
+  }
+  if (els.replaceSizingSelect) {
+    els.replaceSizingSelect.value = 'recommended';
+  }
+  updateReplaceOptionsSummary();
+
+  els.replaceOptionsModal.classList.add('show');
+  els.replaceOptionsModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeReplaceOptionsModal() {
+  els.replaceOptionsModal.classList.remove('show');
+  els.replaceOptionsModal.setAttribute('aria-hidden', 'true');
+}
+
+function openOverflowModal(assetCount, firstRowOffset = 0) {
+  const rec = recommendedDims(assetCount, firstRowOffset);
   state.overflowModalOpen = true;
+  state.pendingGridPlacementOffset = normalizeFirstRowOffset(firstRowOffset, state.cols);
+  const startCol = state.pendingGridPlacementOffset + 1;
   els.overflowMessage.textContent = `${assetCount} images were imported, but the current grid has ${state.grid.length} spaces.`;
-  els.overflowRecommendation.textContent = `Recommended close-to-square size: ${rec.cols} x ${rec.rows}.`;
+  els.overflowRecommendation.textContent = `Recommended size (offset starts at column ${startCol}): ${rec.cols} x ${rec.rows}.`;
   els.overflowColsInput.value = String(Math.max(state.cols, rec.cols));
   els.overflowRowsInput.value = String(Math.max(state.rows, rec.rows));
   els.overflowModal.classList.add('show');
@@ -2442,7 +2845,7 @@ function closeImportModeModal() {
   els.importModeModal.setAttribute('aria-hidden', 'true');
 }
 
-async function executeImportMode(files, mode, selectedIndex = state.selectedSlotIndex) {
+async function executeImportMode(files, mode, selectedIndex = state.selectedSlotIndex, options = {}) {
   if (mode === 'replace' && state.assets.length > 0) {
     if (!confirmAction('Replace current grid? This will discard all existing imported images and layout assignments.')) {
       showToast('Replace cancelled');
@@ -2457,21 +2860,35 @@ async function executeImportMode(files, mode, selectedIndex = state.selectedSlot
   const nextIds = nextAssets.map(asset => asset.id);
 
   if (mode === 'replace') {
+    const requestedFirstRowOffset = Math.max(0, Number(options.firstRowOffset || 0));
+    const replaceSizing = options.replaceSizing || 'recommended';
+    const customRows = clamp(Number(options.customRows || state.rows), 1, GRID_LIMIT);
+    const customCols = clamp(Number(options.customCols || state.cols), 1, GRID_LIMIT);
     state.assets = nextAssets;
     state.holdingAssetIds = [];
     const sequence = nextIds.slice();
-    if (sequence.length > state.grid.length) {
-      queueOverflowSequence(sequence);
-      await renderAll();
-      pushHistory(`Replace with ${nextAssets.length} image${nextAssets.length === 1 ? '' : 's'}`);
-      showToast(`Imported ${nextAssets.length} images. Resize to place all.`);
-      return;
-    } else {
-      placeSequenceInGrid(sequence);
+    const dims = resolveReplaceGridDimensions(sequence.length, requestedFirstRowOffset, replaceSizing, customRows, customCols);
+    if (dims.rows !== state.rows || dims.cols !== state.cols) {
+      resizeGridPreserve(dims.rows, dims.cols);
     }
+
+    const firstRowOffset = normalizeFirstRowOffset(requestedFirstRowOffset, state.cols);
+
+    const placeCapacity = capacityForDims(state.rows, state.cols, firstRowOffset);
+    const placed = sequence.slice(0, placeCapacity);
+    const overflow = sequence.slice(placeCapacity);
+    placeSequenceInGrid(placed, firstRowOffset);
+    if (overflow.length > 0) {
+      pushAssetsToHolding(overflow);
+    }
+
     await renderAll();
     pushHistory(`Replace with ${nextAssets.length} image${nextAssets.length === 1 ? '' : 's'}`);
-    showToast(`Replaced with ${nextAssets.length} image${nextAssets.length === 1 ? '' : 's'}`);
+    if (overflow.length > 0) {
+      showToast(`Replaced with ${placed.length} image${placed.length === 1 ? '' : 's'}; ${overflow.length} staged in Image Tray`);
+    } else {
+      showToast(`Replaced with ${nextAssets.length} images (${dims.cols} x ${dims.rows})`);
+    }
     return;
   }
 
@@ -2540,25 +2957,30 @@ function closeOverflowModal() {
 }
 
 function applyOverflowDimensions() {
-  const required = state.assets.length;
+  const required = state.pendingGridSequence?.length || state.assets.length;
   let cols = clamp(Number(els.overflowColsInput.value || 1), 1, GRID_LIMIT);
   let rows = clamp(Number(els.overflowRowsInput.value || 1), 1, GRID_LIMIT);
+  const rawOffset = Math.max(0, Number(state.pendingGridPlacementOffset) || 0);
+  cols = Math.max(cols, Math.min(GRID_LIMIT, rawOffset + 1));
+  const firstRowOffset = normalizeFirstRowOffset(rawOffset, cols);
 
-  if (rows * cols < required) {
-    rows = minRowsForCols(cols, required);
+  if (capacityForDims(rows, cols, firstRowOffset) < required) {
+    rows = minRowsForCols(cols, required, firstRowOffset);
     if (rows > GRID_LIMIT) {
       rows = GRID_LIMIT;
-      cols = minColsForRows(rows, required);
+      cols = minColsForRows(rows, required, firstRowOffset);
     }
   }
 
   resizeGridPreserve(rows, cols);
   if (state.pendingGridSequence && state.pendingGridSequence.length > 0) {
-    placeSequenceInGrid(state.pendingGridSequence);
+    const adjustedOffset = normalizeFirstRowOffset(state.pendingGridPlacementOffset || 0, cols);
+    placeSequenceInGrid(state.pendingGridSequence, adjustedOffset);
   } else {
     fillUnplacedIntoEmpty();
   }
   state.pendingGridSequence = null;
+  state.pendingGridPlacementOffset = 0;
   closeOverflowModal();
   renderAll();
   showToast(`Grid resized to ${cols} x ${rows}`);
@@ -2689,11 +3111,40 @@ function bindCanvasInteractions() {
     if (!state.dragPayload || isFileDrag(event)) return;
     event.preventDefault();
     maybeExpandGridForDragHover(event);
+    if ((state.dragPayload?.type === 'slot' || state.dragPayload?.type === 'group') && !event.target.classList?.contains('grid-cell')) {
+      const gap = resolveFlowInsertionForGap(event);
+      if (gap) {
+        clearFlowPreview();
+        updateInsertPreview(gap.targetIndex, gap.placement);
+        state.flowPreview = gap;
+      }
+    }
   });
 
   els.canvasViewport.addEventListener('drop', event => {
     if (isFileDrag(event)) return;
+    const flowPreview = state.flowPreview;
     clearFlowPreview();
+    
+    // Handle gap-based insertion (from dragover on canvas)
+    if (flowPreview?.nearBetween && !event.target.classList?.contains('grid-cell')) {
+      if (state.dragPayload?.type === 'slot') {
+        const targetRow = Math.floor(flowPreview.targetIndex / state.cols);
+        const insertCol = clamp(flowPreview.insertionIndex - targetRow * state.cols, 0, state.cols);
+        finalizeAutoExpandSession(flowPreview.targetIndex);
+        placeGroupInRowFlow([state.dragPayload.slotIndex], targetRow, insertCol);
+        state.dragPayload = null;
+        return;
+      } else if (state.dragPayload?.type === 'group') {
+        const targetRow = Math.floor(flowPreview.targetIndex / state.cols);
+        const insertCol = clamp(flowPreview.insertionIndex - targetRow * state.cols, 0, state.cols);
+        finalizeAutoExpandSession(flowPreview.targetIndex);
+        placeGroupInFlow(state.dragPayload.slotIndices, flowPreview.insertionIndex);
+        state.dragPayload = null;
+        return;
+      }
+    }
+    
     const collapsed = finalizeAutoExpandSession();
     state.dragPayload = null;
     state.lastDragExpandAt = 0;
@@ -2850,6 +3301,9 @@ function bindEvents() {
     
     if (event.key === 'Escape') {
       closeTopMenus();
+      if (els.replaceOptionsModal?.classList.contains('show')) {
+        closeReplaceOptionsModal();
+      }
     }
   });
 
@@ -2872,11 +3326,54 @@ function bindEvents() {
     control.addEventListener('change', applyNumberSettings);
   });
 
-  els.importReplaceBtn.addEventListener('click', async () => {
+  els.importReplaceBtn.addEventListener('click', () => {
     const files = state.pendingImportFiles || [];
     closeImportModeModal();
+    openReplaceOptionsModal(files);
+  });
+
+  els.replaceOffsetSelect?.addEventListener('change', () => {
+    updateReplaceOptionsSummary();
+  });
+
+  els.replaceSizingSelect?.addEventListener('change', () => {
+    populateReplaceOffsetOptions();
+    updateReplaceOptionsSummary();
+  });
+
+  els.replaceRowsSelect?.addEventListener('change', () => {
+    if (els.replaceSizingSelect && els.replaceSizingSelect.value !== 'custom') {
+      els.replaceSizingSelect.value = 'custom';
+    }
+    updateReplaceOptionsSummary();
+  });
+
+  els.replaceColsSelect?.addEventListener('change', () => {
+    if (els.replaceSizingSelect && els.replaceSizingSelect.value !== 'custom') {
+      els.replaceSizingSelect.value = 'custom';
+    }
+    populateReplaceOffsetOptions();
+    updateReplaceOptionsSummary();
+  });
+
+  els.replaceCancelBtn?.addEventListener('click', () => {
+    closeReplaceOptionsModal();
+    state.pendingReplaceFiles = null;
     state.pendingImportFiles = null;
-    await executeImportMode(files, 'replace');
+    showToast('Replace cancelled');
+  });
+
+  els.replaceApplyBtn?.addEventListener('click', async () => {
+    const files = state.pendingReplaceFiles || [];
+    const startCol = clamp(Number(els.replaceOffsetSelect?.value || 1), 1, GRID_LIMIT);
+    const firstRowOffset = startCol - 1;
+    const replaceSizing = els.replaceSizingSelect?.value || 'recommended';
+    const customRows = clamp(Number(els.replaceRowsSelect?.value || state.rows), 1, GRID_LIMIT);
+    const customCols = clamp(Number(els.replaceColsSelect?.value || state.cols), 1, GRID_LIMIT);
+    closeReplaceOptionsModal();
+    state.pendingReplaceFiles = null;
+    state.pendingImportFiles = null;
+    await executeImportMode(files, 'replace', state.selectedSlotIndex, { firstRowOffset, replaceSizing, customRows, customCols });
   });
 
   els.importFillBtn.addEventListener('click', async () => {
@@ -2910,6 +3407,15 @@ function bindEvents() {
     closeImportModeModal();
     state.pendingImportFiles = null;
     await executeImportMode(files, 'tray');
+  });
+
+  els.replaceOptionsModal?.addEventListener('click', event => {
+    if (event.target === els.replaceOptionsModal) {
+      closeReplaceOptionsModal();
+      state.pendingReplaceFiles = null;
+      state.pendingImportFiles = null;
+      showToast('Replace cancelled');
+    }
   });
 
   els.clearTrayBtn?.addEventListener('click', () => {
@@ -3127,12 +3633,13 @@ function renderHistoryTimeline() {
     step.appendChild(meta);
     
     step.addEventListener('click', () => {
-      if (isRedo) {
-        const stepsToRedo = history.redoStack.length - (allSteps.length - idx);
-        for (let i = 0; i < stepsToRedo; i++) redo();
-      } else if (!isCurrent) {
-        const stepsToUndo = history.undoStack.length - idx - 1;
-        for (let i = 0; i < stepsToUndo; i++) undo();
+      const currentHistoryIndex = history.undoStack.length - 1;
+      if (idx > currentHistoryIndex) {
+        const stepsToRedo = idx - currentHistoryIndex;
+        for (let i = 0; i < stepsToRedo; i += 1) redo();
+      } else if (idx < currentHistoryIndex) {
+        const stepsToUndo = currentHistoryIndex - idx;
+        for (let i = 0; i < stepsToUndo; i += 1) undo();
       }
     });
     
@@ -3231,10 +3738,22 @@ function initElements() {
   els.importAppendStartBtn = document.getElementById('importAppendStartBtn');
   els.importAppendSelectedBtn = document.getElementById('importAppendSelectedBtn');
   els.importTrayBtn = document.getElementById('importTrayBtn');
+  els.replaceOptionsModal = document.getElementById('replaceOptionsModal');
+  els.replaceModeMessage = document.getElementById('replaceModeMessage');
+  els.replaceOffsetSelect = document.getElementById('replaceOffsetSelect');
+  els.replaceSizingSelect = document.getElementById('replaceSizingSelect');
+  els.replaceRowsSelect = document.getElementById('replaceRowsSelect');
+  els.replaceColsSelect = document.getElementById('replaceColsSelect');
+  els.replaceOffsetHint = document.getElementById('replaceOffsetHint');
+  els.replaceModeRecommendation = document.getElementById('replaceModeRecommendation');
+  els.replaceModeMinimums = document.getElementById('replaceModeMinimums');
+  els.replaceCancelBtn = document.getElementById('replaceCancelBtn');
+  els.replaceApplyBtn = document.getElementById('replaceApplyBtn');
   els.holdingTray = document.getElementById('holdingTray');
   els.holdingCount = document.getElementById('holdingCount');
   els.holdingCountHandle = document.getElementById('holdingCountHandle');
   els.clearTrayBtn = document.getElementById('clearTrayBtn');
+  els.dragTooltip = document.getElementById('dragTooltip');
   
   // History elements
   els.undoBtn = document.getElementById('undoBtn');
