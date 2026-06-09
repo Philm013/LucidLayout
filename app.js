@@ -2925,7 +2925,11 @@ async function executeImportMode(files, mode, selectedIndex = state.selectedSlot
 
   const sequence = state.grid.filter(Boolean);
   let insertIndex = 0;
-  if (mode === 'append-selected') {
+  if (mode === 'append-start') {
+    insertIndex = 0;
+  } else if (mode === 'append-end') {
+    insertIndex = sequence.length;
+  } else if (mode === 'append-selected') {
     const selected = selectedIndex ?? sequence.length;
     insertIndex = clamp(selected, 0, sequence.length);
   } else if (mode === 'tray') {
@@ -3398,6 +3402,13 @@ function bindEvents() {
     await executeImportMode(files, 'append-start');
   });
 
+  els.importAppendEndBtn?.addEventListener('click', async () => {
+    const files = state.pendingImportFiles || [];
+    closeImportModeModal();
+    state.pendingImportFiles = null;
+    await executeImportMode(files, 'append-end');
+  });
+
   els.importAppendSelectedBtn.addEventListener('click', () => {
     const files = state.pendingImportFiles || [];
     if (files.length === 0) {
@@ -3744,6 +3755,7 @@ function initElements() {
   els.importReplaceBtn = document.getElementById('importReplaceBtn');
   els.importFillBtn = document.getElementById('importFillBtn');
   els.importAppendStartBtn = document.getElementById('importAppendStartBtn');
+  els.importAppendEndBtn = document.getElementById('importAppendEndBtn');
   els.importAppendSelectedBtn = document.getElementById('importAppendSelectedBtn');
   els.importTrayBtn = document.getElementById('importTrayBtn');
   els.replaceOptionsModal = document.getElementById('replaceOptionsModal');
