@@ -31,6 +31,7 @@ const state = {
   pendingReplaceFiles: null,
   awaitingAppendSelection: false,
   pendingGridSequence: null,
+  pendingGridIsLayout: false,
   pendingGridPlacementOffset: 0,
   dragPayload: null,
   dropDepth: 0,
@@ -1005,12 +1006,30 @@ function placeSequenceInGrid(sequence, firstRowOffset = 0) {
   state.grid = next;
 }
 
+function placeLayoutInGrid(layout) {
+  const next = new Array(state.rows * state.cols).fill(null);
+  const count = Math.min(next.length, layout.length);
+  for (let i = 0; i < count; i += 1) {
+    next[i] = layout[i] ?? null;
+  }
+  state.grid = next;
+}
+
 function queueOverflowSequence(sequence, options = {}) {
   const firstRowOffset = normalizeFirstRowOffset(options.firstRowOffset || 0, state.cols);
   state.pendingGridSequence = sequence.slice();
+  state.pendingGridIsLayout = false;
   state.pendingGridPlacementOffset = firstRowOffset;
   placeSequenceInGrid(sequence, firstRowOffset);
   openOverflowModal(sequence.length, firstRowOffset);
+}
+
+function queueOverflowLayout(layout) {
+  state.pendingGridSequence = layout.slice();
+  state.pendingGridIsLayout = true;
+  state.pendingGridPlacementOffset = 0;
+  placeLayoutInGrid(layout);
+  openOverflowModal(layout.filter(Boolean).length, 0);
 }
 
 function fillUnplacedIntoEmpty() {
@@ -1114,14 +1133,22 @@ function renderHoldingTray() {
     tile.appendChild(label);
 
     tile.addEventListener('dragstart', () => {
+      clearFlowPreview();
       state.dragPayload = { type: 'asset', assetId, source: 'holding' };
       announceDragExpansion(`Dragging staged image ${asset.name}`);
+      beginAutoExpandSession();
+      state.lastDragExpandAt = 0;
     });
 
     tile.addEventListener('dragend', () => {
+      clearFlowPreview();
+      const collapsed = finalizeAutoExpandSession();
       state.dragPayload = null;
       state.lastDragExpandAt = 0;
       clearDragEdgeIndicators();
+      if (collapsed) {
+        renderAll();
+      }
     });
 
     const removeBtn = document.createElement('button');
@@ -1268,6 +1295,57 @@ function placeAssetInSlot(assetId, slotIndex) {
   renderAll();
 }
 
+function placeAssetInRowFlow(assetId, targetRow, insertCol) {
+  if (!findAssetById(assetId)) return false;
+  const safeRow = clamp(targetRow, 0, state.rows - 1);
+  const oldCols = state.cols;
+  const rowStart = safeRow * oldCols;
+
+  removeAssetFromHolding(assetId);
+  const tempGrid = state.grid.slice();
+  for (let i = 0; i < tempGrid.length; i += 1) {
+    if (tempGrid[i] === assetId) {
+      tempGrid[i] = null;
+    }
+  }
+
+  const rowItems = tempGrid.slice(rowStart, rowStart + oldCols);
+  const col = clamp(insertCol, 0, oldCols);
+  const leftItems = rowItems.slice(0, col);
+  const rightItems = rowItems.slice(col);
+  const newRowItems = [...leftItems, assetId, ...rightItems];
+
+  if (newRowItems.length > oldCols) {
+    const addCols = newRowItems.length - oldCols;
+    const newCols = oldCols + addCols;
+    const expandedGrid = [];
+    for (let r = 0; r < state.rows; r += 1) {
+      for (let c = 0; c < oldCols; c += 1) expandedGrid.push(tempGrid[r * oldCols + c] ?? null);
+      for (let c = 0; c < addCols; c += 1) expandedGrid.push(null);
+    }
+    state.cols = newCols;
+    state.grid = expandedGrid;
+    state.canvasWidth = Math.max(1, state.canvasWidth + addCols * (state.cellWidth + state.gapX));
+  } else {
+    state.grid = tempGrid;
+  }
+
+  const newRowStart = safeRow * state.cols;
+  const paddedRow = [...newRowItems];
+  while (paddedRow.length < state.cols) paddedRow.push(null);
+  for (let c = 0; c < state.cols; c += 1) {
+    state.grid[newRowStart + c] = paddedRow[c] ?? null;
+  }
+
+  pushHistory(`Insert image into row ${safeRow + 1}`);
+  state.selectedSlotIndex = newRowStart + col;
+  state.multiSelectedSlots = [];
+  state.dragPayload = null;
+  renderAll();
+  showToast(`Inserted image into row ${safeRow + 1}`);
+  return true;
+}
+
 function normalizeMultiSelection() {
   state.multiSelectedSlots = state.multiSelectedSlots
     .filter(index => Number.isInteger(index) && index >= 0 && index < state.grid.length && Boolean(state.grid[index]))
@@ -1318,7 +1396,7 @@ function clearFlowPreview() {
       if (isNaN(cellIndex)) return;
       const cellRow = Math.floor(cellIndex / state.cols);
       const cellCol = cellIndex % state.cols;
-      if (cellRow === row && cellCol >= insertCol && state.grid[cellIndex]) {
+      if (cellRow === row && cellCol >= insertCol) {
         cellEl.classList.add('shift-preview-right');
       }
     });
@@ -2076,7 +2154,7 @@ function createGridCell(assetId, index, frame) {
 
   cell.addEventListener('dragover', event => {
     event.preventDefault();
-    if (state.dragPayload?.type === 'slot' || state.dragPayload?.type === 'group') {
+    if (state.dragPayload?.type === 'slot' || state.dragPayload?.type === 'group' || state.dragPayload?.type === 'asset') {
       const flow = resolveFlowInsertionForCell(index, event);
       clearFlowPreview();
       if (flow.nearBetween) {
@@ -2087,8 +2165,12 @@ function createGridCell(assetId, index, frame) {
           : '⇔ Insert (row reflow)';
         showDragTooltip(event.clientX, event.clientY, 'insert', tooltipText);
       } else {
-        cell.classList.add('swap-mode');
-        showDragTooltip(event.clientX, event.clientY, 'swap', '⇄ Swap');
+        if (state.dragPayload.type === 'asset') {
+          showDragTooltip(event.clientX, event.clientY, 'insert', '+ Place here');
+        } else {
+          cell.classList.add('swap-mode');
+          showDragTooltip(event.clientX, event.clientY, 'swap', '⇄ Swap');
+        }
       }
       state.flowPreview = {
         targetIndex: index,
@@ -2096,8 +2178,6 @@ function createGridCell(assetId, index, frame) {
         placement: flow.placement,
         nearBetween: flow.nearBetween
       };
-    } else if (state.dragPayload?.type === 'asset') {
-      showDragTooltip(event.clientX, event.clientY, 'insert', '+ Place here');
     }
     cell.classList.add('drag-over');
   });
@@ -2132,21 +2212,32 @@ function createGridCell(assetId, index, frame) {
 
     if (state.dragPayload.type === 'group') {
       clearFlowPreview();
-      const targetRow = Math.floor(index / state.cols);
-      const insertCol = flowPreview?.nearBetween
-        ? clamp(flowPreview.insertionIndex - targetRow * state.cols, 0, state.cols)
-        : (index % state.cols);
       finalizeAutoExpandSession(index);
-      placeGroupInRowFlow(state.dragPayload.slotIndices || [], targetRow, insertCol);
+      if (flowPreview?.nearBetween) {
+        const targetRow = Math.floor(index / state.cols);
+        const insertCol = clamp(flowPreview.insertionIndex - targetRow * state.cols, 0, state.cols);
+        placeGroupInRowFlow(state.dragPayload.slotIndices || [], targetRow, insertCol);
+      } else {
+        placeGroupInFlow(state.dragPayload.slotIndices || [], index);
+      }
       return;
     }
 
     if (state.dragPayload.type === 'asset') {
-      placeAssetInSlot(state.dragPayload.assetId, index);
       clearFlowPreview();
-      const collapsed = finalizeAutoExpandSession(index);
-      if (collapsed) renderAll();
-      showToast(`Placed image into slot ${index + 1}`);
+      if (flowPreview?.nearBetween) {
+        const targetRow = Math.floor(index / state.cols);
+        const insertCol = clamp(flowPreview.insertionIndex - targetRow * state.cols, 0, state.cols);
+        finalizeAutoExpandSession(index);
+        placeAssetInRowFlow(state.dragPayload.assetId, targetRow, insertCol);
+      } else {
+        placeAssetInSlot(state.dragPayload.assetId, index);
+        const collapsed = finalizeAutoExpandSession(index);
+        if (collapsed) renderAll();
+        showToast(`Placed image into slot ${index + 1}`);
+      }
+      clearFlowPreview();
+      return;
     }
   });
 
@@ -2559,6 +2650,7 @@ function clearGrid() {
   state.pendingReplaceFiles = null;
   state.awaitingAppendSelection = false;
   state.pendingGridSequence = null;
+  state.pendingGridIsLayout = false;
   state.pendingGridPlacementOffset = 0;
   state.holdingAssetIds = [];
   state.multiSelectedSlots = [];
@@ -2910,8 +3002,10 @@ async function executeImportMode(files, mode, selectedIndex = state.selectedSlot
     }
     state.grid = updated;
     if (remaining.length > 0) {
-      const sequence = updated.filter(Boolean).concat(remaining);
-      queueOverflowSequence(sequence);
+      const layout = updated.slice();
+      const lastOccupied = layout.map((id, i) => (id ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+      layout.splice(lastOccupied + 1, 0, ...remaining);
+      queueOverflowLayout(layout);
       await renderAll();
       pushHistory(`Fill ${nextAssets.length} image${nextAssets.length === 1 ? '' : 's'}`);
       showToast(`Imported ${nextAssets.length} images. Resize to place all.`);
@@ -2923,15 +3017,16 @@ async function executeImportMode(files, mode, selectedIndex = state.selectedSlot
     return;
   }
 
-  const sequence = state.grid.filter(Boolean);
+  const layout = state.grid.slice();
   let insertIndex = 0;
   if (mode === 'append-start') {
     insertIndex = 0;
   } else if (mode === 'append-end') {
-    insertIndex = sequence.length;
+    const lastOccupied = layout.map((id, i) => (id ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
+    insertIndex = lastOccupied + 1;
   } else if (mode === 'append-selected') {
-    const selected = selectedIndex ?? sequence.length;
-    insertIndex = clamp(selected, 0, sequence.length);
+    const selected = selectedIndex ?? layout.length;
+    insertIndex = clamp(selected, 0, layout.length);
   } else if (mode === 'tray') {
     // Add directly to holding tray without modifying grid
     state.assets = state.assets.concat(nextAssets);
@@ -2944,15 +3039,20 @@ async function executeImportMode(files, mode, selectedIndex = state.selectedSlot
     insertIndex = 0;
   }
 
-  sequence.splice(insertIndex, 0, ...nextIds);
-  if (sequence.length > state.grid.length) {
-    queueOverflowSequence(sequence);
+  layout.splice(insertIndex, 0, ...nextIds);
+  const capacity = state.grid.length;
+  while (layout.length > capacity && layout[layout.length - 1] == null) {
+    layout.pop();
+  }
+
+  if (layout.length > capacity) {
+    queueOverflowLayout(layout);
     await renderAll();
     pushHistory(`Append ${nextAssets.length} image${nextAssets.length === 1 ? '' : 's'}`);
     showToast(`Imported ${nextAssets.length} images. Resize to place all.`);
     return;
   } else {
-    placeSequenceInGrid(sequence);
+    placeLayoutInGrid(layout);
   }
 
   await renderAll();
@@ -2984,12 +3084,17 @@ function applyOverflowDimensions() {
 
   resizeGridPreserve(rows, cols);
   if (state.pendingGridSequence && state.pendingGridSequence.length > 0) {
-    const adjustedOffset = normalizeFirstRowOffset(state.pendingGridPlacementOffset || 0, cols);
-    placeSequenceInGrid(state.pendingGridSequence, adjustedOffset);
+    if (state.pendingGridIsLayout) {
+      placeLayoutInGrid(state.pendingGridSequence);
+    } else {
+      const adjustedOffset = normalizeFirstRowOffset(state.pendingGridPlacementOffset || 0, cols);
+      placeSequenceInGrid(state.pendingGridSequence, adjustedOffset);
+    }
   } else {
     fillUnplacedIntoEmpty();
   }
   state.pendingGridSequence = null;
+  state.pendingGridIsLayout = false;
   state.pendingGridPlacementOffset = 0;
   closeOverflowModal();
   renderAll();
@@ -3122,11 +3227,16 @@ function bindCanvasInteractions() {
     event.preventDefault();
     maybeExpandGridForDragHover(event);
     const hoveredCell = event.target instanceof Element ? event.target.closest('.grid-cell') : null;
-    if ((state.dragPayload?.type === 'slot' || state.dragPayload?.type === 'group') && !hoveredCell) {
+    if ((state.dragPayload?.type === 'slot' || state.dragPayload?.type === 'group' || state.dragPayload?.type === 'asset') && !hoveredCell) {
       const gap = resolveFlowInsertionForGap(event);
       if (gap) {
         clearFlowPreview();
         updateInsertPreview(gap.targetIndex, gap.placement);
+        const groupSize = state.dragPayload.type === 'group' ? state.dragPayload.slotIndices?.length || 1 : 1;
+        const tooltipText = groupSize > 1
+          ? `⇔ Insert ${groupSize} (row reflow)`
+          : '⇔ Insert (row reflow)';
+        showDragTooltip(event.clientX, event.clientY, 'insert', tooltipText);
         state.flowPreview = gap;
       }
     }
@@ -3152,6 +3262,13 @@ function bindCanvasInteractions() {
         const insertCol = clamp(flowPreview.insertionIndex - targetRow * state.cols, 0, state.cols);
         finalizeAutoExpandSession(flowPreview.targetIndex);
         placeGroupInFlow(state.dragPayload.slotIndices, flowPreview.insertionIndex);
+        state.dragPayload = null;
+        return;
+      } else if (state.dragPayload?.type === 'asset') {
+        const targetRow = Math.floor(flowPreview.targetIndex / state.cols);
+        const insertCol = clamp(flowPreview.insertionIndex - targetRow * state.cols, 0, state.cols);
+        finalizeAutoExpandSession(flowPreview.targetIndex);
+        placeAssetInRowFlow(state.dragPayload.assetId, targetRow, insertCol);
         state.dragPayload = null;
         return;
       }
