@@ -43,7 +43,8 @@ const state = {
   flowPreview: null,
   autoExpandSession: null,
   multiSelectedSlots: [],
-  holdingAssetIds: []
+  holdingAssetIds: [],
+  modalFocusReturnEl: null
 };
 
 const els = {};
@@ -214,6 +215,13 @@ function lucidId() {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function isEditableElement(target) {
+  if (!(target instanceof Element)) return false;
+  if (target.closest('[contenteditable="true"]')) return true;
+  const tag = target.tagName?.toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select';
 }
 
 function getSizeLabel(type, value) {
@@ -855,7 +863,9 @@ function recommendedDims(count, firstRowOffset = 0) {
     if (rows < 1 || rows > GRID_LIMIT) continue;
     const area = rows * cols;
     const aspectDelta = Math.abs(rows - cols);
-    const score = area * 100 + aspectDelta;
+    // Weight aspect ratio more heavily (prefer square layouts)
+    // aspectDelta weighted at 50x means a 1-unit aspect difference = 50 area units
+    const score = area + aspectDelta * 50;
     if (!best || score < best.score) {
       best = { rows, cols, score };
     }
@@ -2057,6 +2067,9 @@ function createGridCell(assetId, index, frame) {
   cell.className = 'grid-cell';
   cell.dataset.index = String(index);
   cell.draggable = Boolean(assetId);
+  cell.tabIndex = 0;
+  cell.setAttribute('role', 'button');
+  cell.setAttribute('aria-label', `Slot ${index + 1}${assetId ? ', filled' : ', empty'}`);
   if (state.selectedSlotIndex === index) {
     cell.classList.add('selected');
   }
@@ -2241,7 +2254,7 @@ function createGridCell(assetId, index, frame) {
     }
   });
 
-  cell.addEventListener('click', async event => {
+  const activateCell = async event => {
     state.selectedSlotIndex = index;
 
     if ((event.ctrlKey || event.metaKey) && assetId) {
@@ -2262,6 +2275,14 @@ function createGridCell(assetId, index, frame) {
       return;
     }
     renderGrid();
+  };
+
+  cell.addEventListener('click', activateCell);
+
+  cell.addEventListener('keydown', async event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    await activateCell(event);
   });
 
   cell.addEventListener('dblclick', event => {
@@ -2640,6 +2661,7 @@ function clearGrid() {
     showToast('Clear/reset cancelled');
     return;
   }
+  pushHistory('Clear and reset grid');
   state.assets = [];
   state.rows = 3;
   state.cols = 3;
@@ -2683,23 +2705,24 @@ function applyNumberSettings() {
   const colsChanged = nextCols !== prevCols;
   const rowsChanged = nextRows !== prevRows;
   
-  if (required > 0 && nextRows * nextCols < required) {
-    if (colsChanged) {
-      // User changed columns, adjust rows to fit all images
-      nextRows = minRowsForCols(nextCols, required);
-      if (nextRows > GRID_LIMIT) {
-        nextRows = clamp(nextRows, 1, GRID_LIMIT);
-        nextCols = minColsForRows(nextRows, required);
-      }
-    } else if (rowsChanged) {
-      // User changed rows, adjust columns to fit all images
+  if (required > 0) {
+    if (rowsChanged && !colsChanged) {
+      // User changed rows, recalculate minimum columns needed for those rows
       nextCols = minColsForRows(nextRows, required);
       if (nextCols > GRID_LIMIT) {
-        nextCols = clamp(nextCols, 1, GRID_LIMIT);
+        nextCols = GRID_LIMIT;
         nextRows = minRowsForCols(nextCols, required);
       }
+      showToast('Columns adjusted to fit all images');
+    } else if (colsChanged && !rowsChanged) {
+      // User changed columns, recalculate minimum rows needed for those columns
+      nextRows = minRowsForCols(nextCols, required);
+      if (nextRows > GRID_LIMIT) {
+        nextRows = GRID_LIMIT;
+        nextCols = minColsForRows(nextRows, required);
+      }
+      showToast('Rows adjusted to fit all images');
     }
-    showToast('Layout expanded to keep all images in grid');
   }
 
   const changed =
@@ -2748,6 +2771,108 @@ function toggleMenu(menuEl, buttonEl) {
   closeTopMenus();
   menuEl.hidden = !willOpen;
   buttonEl.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+}
+
+function getOpenModalElement() {
+  const ordered = [els.docLightboxModal, els.docImportModal, els.historyModal, els.replaceOptionsModal, els.importModeModal, els.overflowModal];
+  for (const modal of ordered) {
+    if (modal?.classList.contains('show')) return modal;
+  }
+  return null;
+}
+
+function getFocusableElements(container) {
+  if (!container) return [];
+  const selector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  return Array.from(container.querySelectorAll(selector)).filter(el => el instanceof HTMLElement && el.offsetParent !== null);
+}
+
+function focusFirstInModal(modalEl) {
+  const first = getFocusableElements(modalEl)[0];
+  if (first) {
+    first.focus();
+  }
+}
+
+function openModal(modalEl) {
+  if (!modalEl) return;
+  if (!modalEl.classList.contains('show')) {
+    state.modalFocusReturnEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }
+  modalEl.classList.add('show');
+  modalEl.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => focusFirstInModal(modalEl));
+}
+
+function closeModal(modalEl, { restoreFocus = true } = {}) {
+  if (!modalEl) return;
+  modalEl.classList.remove('show');
+  modalEl.setAttribute('aria-hidden', 'true');
+  if (restoreFocus && state.modalFocusReturnEl instanceof HTMLElement) {
+    state.modalFocusReturnEl.focus();
+  }
+  state.modalFocusReturnEl = null;
+}
+
+function trapModalTabKey(event, modalEl) {
+  const focusables = getFocusableElements(modalEl);
+  if (focusables.length === 0) {
+    event.preventDefault();
+    return true;
+  }
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  const active = document.activeElement;
+  if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus();
+    return true;
+  }
+  if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+    return true;
+  }
+  return false;
+}
+
+function handleOpenModalKeydown(event) {
+  const openModalEl = getOpenModalElement();
+  if (!openModalEl) return false;
+
+  if (event.key === 'Tab') {
+    return trapModalTabKey(event, openModalEl);
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    if (openModalEl === els.replaceOptionsModal) {
+      closeReplaceOptionsModal();
+      state.pendingReplaceFiles = null;
+      state.pendingImportFiles = null;
+      showToast('Replace cancelled');
+    } else if (openModalEl === els.importModeModal) {
+      closeImportModeModal();
+      state.pendingImportFiles = null;
+      state.awaitingAppendSelection = false;
+      showToast('Import cancelled');
+    } else if (openModalEl === els.overflowModal) {
+      closeOverflowModal();
+      state.pendingGridSequence = null;
+      state.pendingGridIsLayout = false;
+      state.pendingGridPlacementOffset = 0;
+      showToast('Resize cancelled');
+    } else if (openModalEl === els.historyModal) {
+      closeModal(els.historyModal);
+    } else if (openModalEl === els.docLightboxModal) {
+      closeDocLightbox();
+    } else if (openModalEl === els.docImportModal) {
+      closeDocImportModal();
+    }
+    return true;
+  }
+
+  return false;
 }
 
 function getReplaceSizingModeLabel(mode) {
@@ -2904,13 +3029,11 @@ function openReplaceOptionsModal(files) {
   }
   updateReplaceOptionsSummary();
 
-  els.replaceOptionsModal.classList.add('show');
-  els.replaceOptionsModal.setAttribute('aria-hidden', 'false');
+  openModal(els.replaceOptionsModal);
 }
 
 function closeReplaceOptionsModal() {
-  els.replaceOptionsModal.classList.remove('show');
-  els.replaceOptionsModal.setAttribute('aria-hidden', 'true');
+  closeModal(els.replaceOptionsModal);
 }
 
 function openOverflowModal(assetCount, firstRowOffset = 0) {
@@ -2922,8 +3045,7 @@ function openOverflowModal(assetCount, firstRowOffset = 0) {
   els.overflowRecommendation.textContent = `Recommended size (offset starts at column ${startCol}): ${rec.cols} x ${rec.rows}.`;
   els.overflowColsInput.value = String(Math.max(state.cols, rec.cols));
   els.overflowRowsInput.value = String(Math.max(state.rows, rec.rows));
-  els.overflowModal.classList.add('show');
-  els.overflowModal.setAttribute('aria-hidden', 'false');
+  openModal(els.overflowModal);
 }
 
 function openImportModeModal(fileCount) {
@@ -2934,13 +3056,11 @@ function openImportModeModal(fileCount) {
   } else {
     els.importExistingNotice.textContent = 'Current session is empty. Replace starts a fresh grid.';
   }
-  els.importModeModal.classList.add('show');
-  els.importModeModal.setAttribute('aria-hidden', 'false');
+  openModal(els.importModeModal);
 }
 
 function closeImportModeModal() {
-  els.importModeModal.classList.remove('show');
-  els.importModeModal.setAttribute('aria-hidden', 'true');
+  closeModal(els.importModeModal);
 }
 
 async function executeImportMode(files, mode, selectedIndex = state.selectedSlotIndex, options = {}) {
@@ -3029,7 +3149,6 @@ async function executeImportMode(files, mode, selectedIndex = state.selectedSlot
     insertIndex = clamp(selected, 0, layout.length);
   } else if (mode === 'tray') {
     // Add directly to holding tray without modifying grid
-    state.assets = state.assets.concat(nextAssets);
     pushAssetsToHolding(nextIds);
     await renderAll();
     pushHistory(`Add ${nextAssets.length} image${nextAssets.length === 1 ? '' : 's'} to tray`);
@@ -3062,8 +3181,7 @@ async function executeImportMode(files, mode, selectedIndex = state.selectedSlot
 
 function closeOverflowModal() {
   state.overflowModalOpen = false;
-  els.overflowModal.classList.remove('show');
-  els.overflowModal.setAttribute('aria-hidden', 'true');
+  closeModal(els.overflowModal);
 }
 
 function applyOverflowDimensions() {
@@ -3125,6 +3243,12 @@ async function readDirectoryEntry(entry, collected) {
   await readBatch();
 }
 
+function isDocumentFile(file) {
+  const docExts = ['.pdf', '.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls'];
+  const fileName = file.name.toLowerCase();
+  return docExts.some(ext => fileName.endsWith(ext));
+}
+
 function bindGlobalDrop() {
   const showCurtain = () => els.dropCurtain.classList.add('show');
   const hideCurtain = () => els.dropCurtain.classList.remove('show');
@@ -3162,6 +3286,11 @@ function bindGlobalDrop() {
 
   window.addEventListener('drop', async event => {
     try {
+      // Skip if import modal is open - let modal drop listener handle it
+      if (els.docImportModal?.classList.contains('show')) {
+        return;
+      }
+
       const dt = event.dataTransfer;
       const hasFileItems = Boolean(dt && ((dt.files && dt.files.length > 0) || (dt.items && Array.from(dt.items).some(item => item.kind === 'file'))));
       if (!hasFileItems) {
@@ -3196,11 +3325,29 @@ function bindGlobalDrop() {
       }
 
       if (files.length === 0) {
-        showToast('No image files found in drop');
+        showToast('No files found in drop');
         return;
       }
 
-      await addFiles(files);
+      // Separate documents from images
+      const docFiles = files.filter(f => isDocumentFile(f));
+      const imageFiles = files.filter(f => !isDocumentFile(f));
+
+      // If there are documents, process the first one via import modal
+      if (docFiles.length > 0) {
+        openDocImportModal();
+        await processDocFile(docFiles[0]);
+        // If there are also images, queue them for after import
+        if (imageFiles.length > 0) {
+          showToast(`Imported document. ${imageFiles.length} image file(s) ready to add separately.`);
+        }
+      } else if (imageFiles.length > 0) {
+        // Only images - use existing flow
+        await addFiles(imageFiles);
+      } else {
+        showToast('No supported files found in drop');
+        return;
+      }
     } catch (error) {
       console.error('Drop import failed', error);
       showToast('Drop import failed. Try Add files.');
@@ -3362,6 +3509,604 @@ function bindCanvasInteractions() {
   });
 }
 
+// ─── Document import feature ──────────────────────────────────────────────────
+
+const docImportState = {
+  thumbnails: [],      // [{dataUrl, label, width, height}]
+  selected: new Set(), // indices of selected pages
+  abortController: null,
+  activeIndex: -1,
+  lightboxIndex: -1,
+};
+
+function openDocImportModal() {
+  openModal(els.docImportModal);
+  resetDocImportToDropZone();
+}
+
+function closeDocImportModal() {
+  docImportState.abortController?.abort();
+  docImportState.abortController = null;
+  closeModal(els.docImportModal);
+}
+
+function showDocImportStep(step) {
+  const showUpload = step === 'upload';
+  if (els.docImportStepUpload) els.docImportStepUpload.hidden = !showUpload;
+  if (els.docImportStepExplorer) els.docImportStepExplorer.hidden = showUpload;
+}
+
+function resetDocImportToDropZone() {
+  docImportState.thumbnails = [];
+  docImportState.selected.clear();
+  docImportState.activeIndex = -1;
+  docImportState.lightboxIndex = -1;
+  showDocImportStep('upload');
+  els.docImportDropZone.hidden = false;
+  els.docImportProgress.hidden = true;
+  els.docImportBackBtn.hidden = true;
+  els.docImportConfirmBtn.disabled = true;
+  els.docSelectionCount.textContent = '';
+  els.docImportSubtitle.textContent = 'Step 1 of 2 · Select and import a document';
+  if (els.docPreviewImage) {
+    els.docPreviewImage.hidden = true;
+    els.docPreviewImage.src = '';
+  }
+  if (els.docPreviewEmpty) els.docPreviewEmpty.hidden = false;
+  if (els.docPreviewLabel) els.docPreviewLabel.textContent = '';
+  if (els.docFileInput) els.docFileInput.value = '';
+}
+
+function setDocProgress(current, total, label) {
+  const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+  els.docProgressBar.style.width = `${pct}%`;
+  els.docProgressLabel.textContent = label || `${current} / ${total}`;
+}
+
+function updateDocSelectionCount() {
+  const n = docImportState.selected.size;
+  const total = docImportState.thumbnails.length;
+  els.docSelectionCount.textContent = n > 0 ? `${n} of ${total} selected` : '';
+  els.docImportConfirmBtn.disabled = n === 0;
+}
+
+function setDocActiveIndex(index) {
+  if (!Number.isInteger(index) || index < 0 || index >= docImportState.thumbnails.length) return;
+  docImportState.activeIndex = index;
+  renderDocPreviewPanel();
+}
+
+function renderDocPreviewPanel() {
+  const idx = docImportState.activeIndex;
+  const thumb = docImportState.thumbnails[idx];
+  if (!thumb) {
+    if (els.docPreviewImage) {
+      els.docPreviewImage.hidden = true;
+      els.docPreviewImage.src = '';
+    }
+    if (els.docPreviewEmpty) els.docPreviewEmpty.hidden = false;
+    if (els.docPreviewLabel) els.docPreviewLabel.textContent = '';
+    return;
+  }
+
+  if (els.docPreviewImage) {
+    els.docPreviewImage.src = thumb.dataUrl;
+    els.docPreviewImage.alt = thumb.label;
+    els.docPreviewImage.hidden = false;
+  }
+  if (els.docPreviewEmpty) els.docPreviewEmpty.hidden = true;
+  if (els.docPreviewLabel) {
+    const dims = thumb.width && thumb.height ? ` (${Math.round(thumb.width)} x ${Math.round(thumb.height)})` : '';
+    els.docPreviewLabel.textContent = `${thumb.label}${dims}`;
+  }
+}
+
+function openDocLightbox(startIndex = docImportState.activeIndex) {
+  if (!Number.isInteger(startIndex) || startIndex < 0 || startIndex >= docImportState.thumbnails.length) return;
+  docImportState.lightboxIndex = startIndex;
+  renderDocLightbox();
+  openModal(els.docLightboxModal);
+}
+
+function closeDocLightbox() {
+  closeModal(els.docLightboxModal);
+  docImportState.lightboxIndex = -1;
+}
+
+function stepDocLightbox(delta) {
+  if (!docImportState.thumbnails.length) return;
+  const total = docImportState.thumbnails.length;
+  const base = Number.isInteger(docImportState.lightboxIndex) && docImportState.lightboxIndex >= 0
+    ? docImportState.lightboxIndex
+    : 0;
+  const next = (base + delta + total) % total;
+  docImportState.lightboxIndex = next;
+  docImportState.activeIndex = next;
+  renderDocLightbox();
+  renderDocPreviewPanel();
+}
+
+function renderDocLightbox() {
+  const idx = docImportState.lightboxIndex;
+  const thumb = docImportState.thumbnails[idx];
+  if (!thumb) return;
+  if (els.docLightboxImage) {
+    els.docLightboxImage.src = thumb.dataUrl;
+    els.docLightboxImage.alt = thumb.label;
+  }
+  if (els.docLightboxLabel) {
+    els.docLightboxLabel.textContent = `${thumb.label} (${idx + 1} / ${docImportState.thumbnails.length})`;
+  }
+}
+
+function renderDocThumbnails() {
+  els.docThumbGrid.innerHTML = '';
+  const thumbs = docImportState.thumbnails;
+  els.docResultsInfo.textContent = `${thumbs.length} page${thumbs.length === 1 ? '' : 's'} found`;
+
+  if (thumbs.length > 0 && (docImportState.activeIndex < 0 || docImportState.activeIndex >= thumbs.length)) {
+    docImportState.activeIndex = 0;
+  }
+
+  thumbs.forEach((thumb, idx) => {
+    const item = document.createElement('div');
+    item.className = 'doc-thumb-item'
+      + (docImportState.selected.has(idx) ? ' selected' : '')
+      + (docImportState.activeIndex === idx ? ' active' : '');
+    item.setAttribute('role', 'listitem');
+    item.tabIndex = 0;
+    item.setAttribute('aria-label', `${thumb.label}${docImportState.selected.has(idx) ? ', selected' : ', not selected'}`);
+
+    const img = document.createElement('img');
+    img.className = 'doc-thumb-img';
+    img.src = thumb.dataUrl;
+    img.alt = thumb.label;
+    img.loading = 'lazy';
+    item.appendChild(img);
+
+    const check = document.createElement('div');
+    check.className = 'doc-thumb-check';
+    check.innerHTML = docImportState.selected.has(idx) ? '✓' : '';
+    item.appendChild(check);
+
+    const label = document.createElement('div');
+    label.className = 'doc-thumb-label';
+    label.textContent = thumb.label;
+    item.appendChild(label);
+
+    const toggle = () => {
+      docImportState.activeIndex = idx;
+      if (docImportState.selected.has(idx)) {
+        docImportState.selected.delete(idx);
+        item.classList.remove('selected');
+        check.innerHTML = '';
+        item.setAttribute('aria-label', `${thumb.label}, not selected`);
+      } else {
+        docImportState.selected.add(idx);
+        item.classList.add('selected');
+        check.innerHTML = '✓';
+        item.setAttribute('aria-label', `${thumb.label}, selected`);
+      }
+      updateDocSelectionCount();
+      renderDocThumbnails();
+    };
+
+    check.addEventListener('click', e => {
+      e.stopPropagation();
+      toggle();
+    });
+    item.addEventListener('dblclick', () => {
+      docImportState.activeIndex = idx;
+      openDocLightbox(idx);
+    });
+    item.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle();
+      } else if (e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        docImportState.activeIndex = idx;
+        openDocLightbox(idx);
+      }
+    });
+
+    els.docThumbGrid.appendChild(item);
+  });
+
+  updateDocSelectionCount();
+  renderDocPreviewPanel();
+}
+
+function parsePageRange(str, max) {
+  const indices = new Set();
+  const parts = str.split(',').map(s => s.trim()).filter(Boolean);
+  for (const part of parts) {
+    if (/^\d+$/.test(part)) {
+      const n = parseInt(part, 10) - 1;
+      if (n >= 0 && n < max) indices.add(n);
+    } else if (/^\d+-\d+$/.test(part)) {
+      const [a, b] = part.split('-').map(Number);
+      for (let i = Math.min(a, b); i <= Math.max(a, b); i++) {
+        const n = i - 1;
+        if (n >= 0 && n < max) indices.add(n);
+      }
+    }
+  }
+  return indices;
+}
+
+async function processDocFile(file) {
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('Large document detected. Parsing may take longer.');
+  }
+
+  const importer = window.__docImporter;
+  if (!importer) {
+    showToast('Document importer not available. Make sure the page is served via HTTP (not file://).');
+    return;
+  }
+
+  // Check for INDD upfront
+  if (file.name.toLowerCase().endsWith('.indd')) {
+    showToast('InDesign (.indd) files cannot be processed in the browser. Export your InDesign file as PDF first, then import.');
+    return;
+  }
+
+  // Show progress
+  showDocImportStep('upload');
+  els.docImportDropZone.hidden = true;
+  els.docImportProgress.hidden = false;
+  els.docImportSubtitle.textContent = `Step 1 of 2 · Processing ${file.name}`;
+  setDocProgress(0, 1, 'Loading libraries…');
+
+  docImportState.abortController = new AbortController();
+
+  try {
+    const thumbs = await importer.extractDocumentThumbnails(file, {
+      signal: docImportState.abortController.signal,
+      onProgress: ({ current, total, label }) => setDocProgress(current, total, label),
+    });
+
+    if (docImportState.abortController.signal.aborted) return;
+
+    docImportState.thumbnails = thumbs;
+    docImportState.selected = new Set(thumbs.map((_, i) => i)); // all selected by default
+    docImportState.activeIndex = thumbs.length > 0 ? 0 : -1;
+
+    els.docImportProgress.hidden = true;
+    showDocImportStep('explorer');
+    els.docImportBackBtn.hidden = false;
+    els.docImportSubtitle.textContent = `Step 2 of 2 · Explore and select pages from ${file.name}`;
+
+    renderDocThumbnails();
+
+  } catch (err) {
+    els.docImportProgress.hidden = true;
+    els.docImportDropZone.hidden = false;
+
+    if (err.code === 'INDD_UNSUPPORTED') {
+      showToast('InDesign (.indd) files require export as PDF. Open in InDesign → File → Export → Adobe PDF, then import the PDF here.');
+    } else if (err.code === 'CFB_UNSUPPORTED') {
+      showToast(err.message);
+    } else if (err.message?.includes('CDN') || err.message?.includes('Failed to load')) {
+      showToast('Could not load parsing library. Check your internet connection and try again.');
+    } else {
+      showToast(`Could not parse document: ${err.message}`);
+    }
+    console.error('[doc-importer]', err);
+  }
+}
+
+async function confirmDocImport() {
+  const indices = Array.from(docImportState.selected).sort((a, b) => a - b);
+  if (indices.length === 0) {
+    showToast('No pages selected');
+    return;
+  }
+
+  const selected = indices.map(i => docImportState.thumbnails[i]);
+  closeDocImportModal();
+
+  // Convert dataUrls to File-like objects (Blob + name) for the standard pipeline
+  const fileObjects = await Promise.all(selected.map(async (thumb, i) => {
+    const resp = await fetch(thumb.dataUrl);
+    const blob = await resp.blob();
+    return new File([blob], `${thumb.label.replace(/[^a-z0-9]/gi, '_')}.png`, { type: 'image/png' });
+  }));
+
+  await addFiles(fileObjects);
+}
+
+function bindDocImportEvents() {
+  if (!els.importDocBtn) return;
+
+  els.importDocBtn.addEventListener('click', () => {
+    closeTopMenus();
+    openDocImportModal();
+  });
+
+  els.docImportCloseBtn.addEventListener('click', closeDocImportModal);
+
+  els.docImportModal.addEventListener('click', event => {
+    if (event.target === els.docImportModal) closeDocImportModal();
+  });
+
+  // Drop zone click
+  els.docImportDropZone.addEventListener('click', () => els.docFileInput?.click());
+  els.docImportDropZone.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); els.docFileInput?.click(); }
+  });
+
+  // File input
+  if (els.docFileInput) {
+    els.docFileInput.addEventListener('change', async e => {
+      const file = e.target.files?.[0];
+      if (file) await processDocFile(file);
+      e.target.value = '';
+    });
+  }
+
+  // Drag-over drop zone
+  els.docImportDropZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    els.docImportDropZone.classList.add('drag-over');
+  });
+  els.docImportDropZone.addEventListener('dragleave', e => {
+    e.stopPropagation();
+    els.docImportDropZone.classList.remove('drag-over');
+  });
+  els.docImportDropZone.addEventListener('drop', async e => {
+    e.preventDefault();
+    e.stopPropagation();
+    els.docImportDropZone.classList.remove('drag-over');
+    const file = e.dataTransfer?.files?.[0];
+    if (file) await processDocFile(file);
+  });
+
+  els.docPreviewStage?.addEventListener('dblclick', () => {
+    if (docImportState.activeIndex >= 0) {
+      openDocLightbox(docImportState.activeIndex);
+    }
+  });
+
+  els.docPreviewStage?.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && docImportState.activeIndex >= 0) {
+      e.preventDefault();
+      openDocLightbox(docImportState.activeIndex);
+    }
+  });
+
+  els.docPreviewOpenBtn?.addEventListener('click', () => {
+    if (docImportState.activeIndex >= 0) {
+      openDocLightbox(docImportState.activeIndex);
+    }
+  });
+
+  els.docLightboxCloseBtn?.addEventListener('click', closeDocLightbox);
+  els.docLightboxPrevBtn?.addEventListener('click', () => stepDocLightbox(-1));
+  els.docLightboxNextBtn?.addEventListener('click', () => stepDocLightbox(1));
+  els.docLightboxZoomOutBtn?.addEventListener('click', () => zoomLightbox(-0.1));
+  els.docLightboxZoomInBtn?.addEventListener('click', () => zoomLightbox(0.1));
+  els.docLightboxFitBtn?.addEventListener('click', resetLightboxZoom);
+  els.docLightboxResetBtn?.addEventListener('click', resetLightboxZoom);
+
+  els.docLightboxModal?.addEventListener('click', event => {
+    if (event.target === els.docLightboxModal) {
+      closeDocLightbox();
+    }
+  });
+
+  document.addEventListener('keydown', event => {
+    if (!els.docLightboxModal?.classList.contains('show')) return;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      stepDocLightbox(-1);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      stepDocLightbox(1);
+    }
+  });
+
+  // Cancel extraction
+  els.docImportCancelBtn.addEventListener('click', () => {
+    docImportState.abortController?.abort();
+    resetDocImportToDropZone();
+    showToast('Extraction cancelled');
+  });
+
+  // Select / deselect all
+  els.docSelectAllBtn.addEventListener('click', () => {
+    docImportState.selected = new Set(docImportState.thumbnails.map((_, i) => i));
+    renderDocThumbnails();
+  });
+
+  els.docDeselectAllBtn.addEventListener('click', () => {
+    docImportState.selected.clear();
+    renderDocThumbnails();
+  });
+
+  // Range apply
+  els.docRangeApplyBtn.addEventListener('click', () => {
+    const raw = els.docRangeInput?.value || '';
+    if (!raw.trim()) return;
+    const indices = parsePageRange(raw, docImportState.thumbnails.length);
+    docImportState.selected = indices;
+    renderDocThumbnails();
+    els.docRangeInput.value = '';
+  });
+
+  // Back button
+  els.docImportBackBtn.addEventListener('click', resetDocImportToDropZone);
+
+  // Confirm import
+  els.docImportConfirmBtn.addEventListener('click', confirmDocImport);
+}
+
+// ─── Zoom/Pan for Lightbox ────────────────────────────────────────
+const lightboxZoomState = {
+  zoom: 1,
+  panX: 0,
+  panY: 0,
+};
+
+function updateLightboxTransform() {
+  if (!els.docLightboxImage) return;
+  els.docLightboxImage.style.transform = `translate(${lightboxZoomState.panX}px, ${lightboxZoomState.panY}px) scale(${lightboxZoomState.zoom})`;
+  if (els.docLightboxZoomLabel) {
+    els.docLightboxZoomLabel.textContent = `${Math.round(lightboxZoomState.zoom * 100)}%`;
+  }
+}
+
+function zoomLightbox(delta) {
+  lightboxZoomState.zoom = Math.max(0.1, Math.min(5, lightboxZoomState.zoom + delta));
+  updateLightboxTransform();
+}
+
+function resetLightboxZoom() {
+  lightboxZoomState.zoom = 1;
+  lightboxZoomState.panX = 0;
+  lightboxZoomState.panY = 0;
+  updateLightboxTransform();
+}
+
+function openDocLightboxWithZoomReset(startIndex) {
+  lightboxZoomState.zoom = 1;
+  lightboxZoomState.panX = 0;
+  lightboxZoomState.panY = 0;
+  openDocLightbox(startIndex);
+  setTimeout(updateLightboxTransform, 50);
+}
+
+// ─── Zoom/Pan for Preview Modal ─────────────────────────────────
+const previewZoomState = {
+  zoom: 1,
+  panX: 0,
+  panY: 0,
+};
+
+function updatePreviewTransform() {
+  if (!els.previewModalImage) return;
+  els.previewModalImage.style.transform = `translate(${previewZoomState.panX}px, ${previewZoomState.panY}px) scale(${previewZoomState.zoom})`;
+  if (els.previewZoomLabel) {
+    els.previewZoomLabel.textContent = `${Math.round(previewZoomState.zoom * 100)}%`;
+  }
+}
+
+function zoomPreview(delta) {
+  previewZoomState.zoom = Math.max(0.1, Math.min(5, previewZoomState.zoom + delta));
+  updatePreviewTransform();
+}
+
+function resetPreviewZoom() {
+  previewZoomState.zoom = 1;
+  previewZoomState.panX = 0;
+  previewZoomState.panY = 0;
+  updatePreviewTransform();
+}
+
+// ─── Lightbox Interactive Canvas ────────────────────────────────────
+function setupLightboxCanvasInteractions() {
+  if (!els.docLightboxContainer) return;
+
+  let panState = { active: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 };
+
+  // Scroll wheel zoom
+  els.docLightboxContainer.addEventListener('wheel', e => {
+    if (!els.docLightboxModal?.classList.contains('show')) return;
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    zoomLightbox(delta);
+  }, { passive: false });
+
+  // Drag to pan (only when zoomed in)
+  els.docLightboxImage.addEventListener('mousedown', e => {
+    if (lightboxZoomState.zoom <= 1) return; // Don't pan at 1:1 zoom
+    e.preventDefault();
+    panState.active = true;
+    panState.startX = e.clientX;
+    panState.startY = e.clientY;
+    panState.startPanX = lightboxZoomState.panX;
+    panState.startPanY = lightboxZoomState.panY;
+    els.docLightboxImage.style.cursor = 'grabbing';
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!panState.active || !els.docLightboxModal?.classList.contains('show')) return;
+    const deltaX = e.clientX - panState.startX;
+    const deltaY = e.clientY - panState.startY;
+    lightboxZoomState.panX = panState.startPanX + deltaX;
+    lightboxZoomState.panY = panState.startPanY + deltaY;
+    updateLightboxTransform();
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (panState.active) {
+      panState.active = false;
+      els.docLightboxImage.style.cursor = 'grab';
+    }
+  });
+
+  // Prevent image selection
+  els.docLightboxImage.style.userSelect = 'none';
+  els.docLightboxImage.addEventListener('dragstart', e => e.preventDefault());
+}
+
+// ─── Preview Modal Interactive Canvas ────────────────────────────────
+function setupPreviewCanvasInteractions() {
+  if (!els.previewImageContainer) return;
+
+  let panState = { active: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 };
+
+  // Scroll wheel zoom
+  els.previewImageContainer.addEventListener('wheel', e => {
+    if (!els.previewModal?.classList.contains('show')) return;
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    zoomPreview(delta);
+  }, { passive: false });
+
+  // Drag to pan (only when zoomed in)
+  els.previewModalImage.addEventListener('mousedown', e => {
+    if (previewZoomState.zoom <= 1) return; // Don't pan at 1:1 zoom
+    e.preventDefault();
+    panState.active = true;
+    panState.startX = e.clientX;
+    panState.startY = e.clientY;
+    panState.startPanX = previewZoomState.panX;
+    panState.startPanY = previewZoomState.panY;
+    els.previewModalImage.style.cursor = 'grabbing';
+  });
+
+  document.addEventListener('mousemove', e => {
+    if (!panState.active || !els.previewModal?.classList.contains('show')) return;
+    const deltaX = e.clientX - panState.startX;
+    const deltaY = e.clientY - panState.startY;
+    previewZoomState.panX = panState.startPanX + deltaX;
+    previewZoomState.panY = panState.startPanY + deltaY;
+    updatePreviewTransform();
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (panState.active) {
+      panState.active = false;
+      els.previewModalImage.style.cursor = 'grab';
+    }
+  });
+
+  // Prevent image selection
+  els.previewModalImage.style.userSelect = 'none';
+  els.previewModalImage.addEventListener('dragstart', e => e.preventDefault());
+
+  // Click to open fullscreen lightbox (for document page previews)
+  els.docPreviewImage?.addEventListener('click', () => {
+    if (els.docPreviewImage.hidden) return;
+    openDocLightboxWithZoomReset(docImportState.activeIndex);
+  });
+}
+
+// ─── End document import feature ─────────────────────────────────────────────
+
 function bindEvents() {
   els.toggleControlsBtn.addEventListener('click', event => {
     event.preventDefault();
@@ -3409,6 +4154,14 @@ function bindEvents() {
   });
 
   document.addEventListener('keydown', event => {
+    if (handleOpenModalKeydown(event)) {
+      return;
+    }
+
+    if (isEditableElement(event.target)) {
+      return;
+    }
+
     // Undo/Redo shortcuts
     if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
       if (event.shiftKey) {
@@ -3430,9 +4183,6 @@ function bindEvents() {
     
     if (event.key === 'Escape') {
       closeTopMenus();
-      if (els.replaceOptionsModal?.classList.contains('show')) {
-        closeReplaceOptionsModal();
-      }
     }
   });
 
@@ -3591,8 +4341,26 @@ function bindEvents() {
   });
   
   els.clearGridBtn.addEventListener('click', () => {
-    pushHistory('Clear and reset grid');
     clearGrid();
+  });
+
+  els.importModeModal?.addEventListener('click', event => {
+    if (event.target === els.importModeModal) {
+      closeImportModeModal();
+      state.pendingImportFiles = null;
+      state.awaitingAppendSelection = false;
+      showToast('Import cancelled');
+    }
+  });
+
+  els.overflowModal?.addEventListener('click', event => {
+    if (event.target === els.overflowModal) {
+      closeOverflowModal();
+      state.pendingGridSequence = null;
+      state.pendingGridIsLayout = false;
+      state.pendingGridPlacementOffset = 0;
+      showToast('Resize cancelled');
+    }
   });
 
   els.toggleTrayBtn.addEventListener('click', () => {
@@ -3658,6 +4426,10 @@ function bindEvents() {
   els.previewCloseBtn.addEventListener('click', closePreviewModal);
   els.previewPrevBtn.addEventListener('click', () => stepPreview(-1));
   els.previewNextBtn.addEventListener('click', () => stepPreview(1));
+  els.previewZoomOutBtn?.addEventListener('click', () => zoomPreview(-0.1));
+  els.previewZoomInBtn?.addEventListener('click', () => zoomPreview(0.1));
+  els.previewFitBtn?.addEventListener('click', resetPreviewZoom);
+  els.previewResetBtn?.addEventListener('click', resetPreviewZoom);
 
   els.previewModal.addEventListener('click', event => {
     if (event.target === els.previewModal) {
@@ -3670,15 +4442,13 @@ function bindEvents() {
   els.redoBtn.addEventListener('click', redo);
   
   els.historyBtn.addEventListener('click', () => {
-    els.historyModal.classList.add('show');
-    els.historyModal.setAttribute('aria-hidden', 'false');
+    openModal(els.historyModal);
     renderHistoryTimeline();
     updateHistoryButtonStates();
   });
   
   els.historyCloseBtn.addEventListener('click', () => {
-    els.historyModal.classList.remove('show');
-    els.historyModal.setAttribute('aria-hidden', 'true');
+    closeModal(els.historyModal);
   });
   
   els.historyClearBtn.addEventListener('click', () => {
@@ -3693,8 +4463,7 @@ function bindEvents() {
   
   els.historyModal.addEventListener('click', event => {
     if (event.target === els.historyModal) {
-      els.historyModal.classList.remove('show');
-      els.historyModal.setAttribute('aria-hidden', 'true');
+      closeModal(els.historyModal);
     }
   });
 
@@ -3841,6 +4610,11 @@ function initElements() {
   els.previewPrevBtn = document.getElementById('previewPrevBtn');
   els.previewCloseBtn = document.getElementById('previewCloseBtn');
   els.previewNextBtn = document.getElementById('previewNextBtn');
+  els.previewZoomOutBtn = document.getElementById('previewZoomOutBtn');
+  els.previewZoomInBtn = document.getElementById('previewZoomInBtn');
+  els.previewFitBtn = document.getElementById('previewFitBtn');
+  els.previewResetBtn = document.getElementById('previewResetBtn');
+  els.previewZoomLabel = document.getElementById('previewZoomLabel');
 
   els.dropCurtain = document.getElementById('dropCurtain');
   els.canvasViewport = document.getElementById('canvasViewport');
@@ -3891,7 +4665,47 @@ function initElements() {
   els.holdingCountHandle = document.getElementById('holdingCountHandle');
   els.clearTrayBtn = document.getElementById('clearTrayBtn');
   els.dragTooltip = document.getElementById('dragTooltip');
-  
+
+  // Document import elements
+  els.importDocBtn = document.getElementById('importDocBtn');
+  els.docImportModal = document.getElementById('docImportModal');
+  els.docImportStepUpload = document.getElementById('docImportStepUpload');
+  els.docImportStepExplorer = document.getElementById('docImportStepExplorer');
+  els.docImportCloseBtn = document.getElementById('docImportCloseBtn');
+  els.docImportDropZone = document.getElementById('docImportDropZone');
+  els.docFileInput = document.getElementById('docFileInput');
+  els.docImportProgress = document.getElementById('docImportProgress');
+  els.docProgressBar = document.getElementById('docProgressBar');
+  els.docProgressLabel = document.getElementById('docProgressLabel');
+  els.docImportCancelBtn = document.getElementById('docImportCancelBtn');
+  els.docImportResults = document.getElementById('docImportResults');
+  els.docResultsInfo = document.getElementById('docResultsInfo');
+  els.docSelectAllBtn = document.getElementById('docSelectAllBtn');
+  els.docDeselectAllBtn = document.getElementById('docDeselectAllBtn');
+  els.docRangeInput = document.getElementById('docRangeInput');
+  els.docRangeApplyBtn = document.getElementById('docRangeApplyBtn');
+  els.docThumbGrid = document.getElementById('docThumbGrid');
+  els.docPreviewStage = document.getElementById('docPreviewStage');
+  els.docPreviewImage = document.getElementById('docPreviewImage');
+  els.docPreviewEmpty = document.getElementById('docPreviewEmpty');
+  els.docPreviewLabel = document.getElementById('docPreviewLabel');
+  els.docPreviewOpenBtn = document.getElementById('docPreviewOpenBtn');
+  els.docImportBackBtn = document.getElementById('docImportBackBtn');
+  els.docSelectionCount = document.getElementById('docSelectionCount');
+  els.docImportConfirmBtn = document.getElementById('docImportConfirmBtn');
+  els.docImportSubtitle = document.getElementById('docImportSubtitle');
+  els.docLightboxModal = document.getElementById('docLightboxModal');
+  els.docLightboxImage = document.getElementById('docLightboxImage');
+  els.docLightboxLabel = document.getElementById('docLightboxLabel');
+  els.docLightboxCloseBtn = document.getElementById('docLightboxCloseBtn');
+  els.docLightboxPrevBtn = document.getElementById('docLightboxPrevBtn');
+  els.docLightboxNextBtn = document.getElementById('docLightboxNextBtn');
+  els.docLightboxZoomOutBtn = document.getElementById('docLightboxZoomOutBtn');
+  els.docLightboxZoomInBtn = document.getElementById('docLightboxZoomInBtn');
+  els.docLightboxFitBtn = document.getElementById('docLightboxFitBtn');
+  els.docLightboxResetBtn = document.getElementById('docLightboxResetBtn');
+  els.docLightboxZoomLabel = document.getElementById('docLightboxZoomLabel');
+
   // History elements
   els.undoBtn = document.getElementById('undoBtn');
   els.redoBtn = document.getElementById('redoBtn');
@@ -3910,6 +4724,9 @@ async function init() {
   const restored = await restoreSession();
   ensureGridShape();
   bindEvents();
+  bindDocImportEvents();
+  setupLightboxCanvasInteractions();
+  setupPreviewCanvasInteractions();
   await renderAll();
   updateHistoryButtonStates();
   renderHistoryTimeline();

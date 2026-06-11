@@ -80,6 +80,8 @@
                 <div id="importMenu" class="menu-pop menu-pop-right" hidden>
                     <button id="importFolderBtn" class="menu-item" type="button">Load folder</button>
                     <button id="importFilesBtn" class="menu-item" type="button">Add files</button>
+                    <hr class="menu-divider">
+                    <button id="importDocBtn" class="menu-item" type="button">From document…</button>
                 </div>
                 <button id="exportMenuBtn" class="button button-primary" type="button" aria-haspopup="true" aria-expanded="false">Export ▾</button>
                 <div id="exportMenu" class="menu-pop menu-pop-right" hidden>
@@ -127,6 +129,100 @@
   <div id="dragTooltip" class="drag-tooltip hidden" aria-hidden="true"></div>
 
   <div id="dropCurtain" class="drop-curtain" aria-hidden="true">Drop files or folders to import</div>
+
+  <!-- Document Import Modal -->
+  <div id="docImportModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card doc-import-card" role="dialog" aria-modal="true" aria-labelledby="docImportTitle">
+      <div class="doc-import-header">
+        <div class="doc-import-header-left">
+          <h3 id="docImportTitle">Import from Document</h3>
+          <p class="hint" id="docImportSubtitle">Select pages to import as images</p>
+        </div>
+        <button id="docImportCloseBtn" class="mini-button doc-import-close" type="button" aria-label="Close document import">✕</button>
+      </div>
+
+      <div id="docImportStepUpload" class="doc-import-step">
+        <div id="docImportDropZone" class="doc-drop-zone" role="button" tabindex="0"
+             aria-label="Choose document file or drop here">
+          <div class="doc-drop-icon">📄</div>
+          <div class="doc-drop-label">Drop a document here or click to browse</div>
+          <div class="doc-drop-hint">PDF, DOCX, PPTX, XLSX supported</div>
+          <div class="doc-drop-hint">Large documents are supported and may take longer to parse</div>
+          <input id="docFileInput" type="file" class="sr-only"
+                 accept=".pdf,.docx,.pptx,.xlsx,.doc,.ppt,.xls,.indd"
+                 aria-label="Choose document file">
+          
+          <div id="docImportProgress" class="doc-import-progress" hidden>
+            <div class="doc-progress-overlay">
+              <div class="doc-progress-bar-track"><div id="docProgressBar" class="doc-progress-bar"></div></div>
+              <div id="docProgressLabel" class="doc-progress-label">Preparing…</div>
+              <button id="docImportCancelBtn" class="button" type="button">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="docImportStepExplorer" class="doc-import-step" hidden>
+        <div id="docImportResults" class="doc-import-results">
+        <div class="doc-results-toolbar">
+          <span id="docResultsInfo" class="doc-results-info"></span>
+          <div class="doc-results-actions">
+            <button id="docSelectAllBtn" class="mini-button" type="button">Select all</button>
+            <button id="docDeselectAllBtn" class="mini-button" type="button">Deselect all</button>
+            <label class="doc-range-label">
+              <span>Pages:</span>
+              <input id="docRangeInput" type="text" class="doc-range-input" placeholder="e.g. 1-5, 8, 10-12"
+                     aria-label="Page range selection">
+              <button id="docRangeApplyBtn" class="mini-button" type="button">Apply</button>
+            </label>
+          </div>
+        </div>
+        <div class="doc-results-body">
+          <div class="doc-thumbs-wrap">
+            <div id="docThumbGrid" class="doc-thumb-grid" role="list" aria-label="Document page thumbnails"></div>
+          </div>
+          <aside class="doc-preview-pane" aria-label="Selected page preview">
+            <div id="docPreviewStage" class="doc-preview-stage" role="button" tabindex="0" aria-label="Open selected page preview fullscreen">
+              <img id="docPreviewImage" class="doc-preview-image" alt="Selected page preview" hidden>
+              <div id="docPreviewEmpty" class="doc-preview-empty">Select a page to preview</div>
+            </div>
+            <div class="doc-preview-meta">
+              <span id="docPreviewLabel" class="doc-preview-label"></span>
+              <button id="docPreviewOpenBtn" class="mini-button" type="button">Full screen</button>
+            </div>
+          </aside>
+        </div>
+        </div>
+      </div>
+
+      <div class="modal-actions doc-import-footer">
+        <button id="docImportBackBtn" class="button" type="button" hidden>← Load another</button>
+        <span class="doc-footer-spacer"></span>
+        <span id="docSelectionCount" class="doc-selection-count"></span>
+        <button id="docImportConfirmBtn" class="button button-primary" type="button" disabled>Import selected</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="docLightboxModal" class="modal-backdrop" aria-hidden="true">
+    <div class="doc-lightbox-card" role="dialog" aria-modal="true" aria-label="Document page preview">
+      <button id="docLightboxCloseBtn" class="mini-button doc-lightbox-close" type="button" aria-label="Close fullscreen preview">✕</button>
+      <div class="lightbox-controls-top">
+        <button id="docLightboxZoomOutBtn" class="mini-button" type="button" aria-label="Zoom out">−</button>
+        <span id="docLightboxZoomLabel" class="lightbox-zoom-label">100%</span>
+        <button id="docLightboxZoomInBtn" class="mini-button" type="button" aria-label="Zoom in">+</button>
+        <span class="control-sep"></span>
+        <button id="docLightboxFitBtn" class="mini-button" type="button" aria-label="Fit to window">Fit</button>
+        <button id="docLightboxResetBtn" class="mini-button" type="button" aria-label="Reset zoom">Reset</button>
+      </div>
+      <div class="lightbox-image-container" id="docLightboxContainer">
+        <img id="docLightboxImage" class="doc-lightbox-image" alt="Fullscreen page preview">
+      </div>
+      <button id="docLightboxPrevBtn" class="mini-button doc-lightbox-nav prev" type="button" aria-label="Previous page">◀</button>
+      <button id="docLightboxNextBtn" class="mini-button doc-lightbox-nav next" type="button" aria-label="Next page">▶</button>
+      <div id="docLightboxLabel" class="doc-lightbox-label"></div>
+    </div>
+  </div>
 
   <div id="overflowModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="overflowTitle">
@@ -205,9 +301,17 @@
             <h3 id="previewModalTitle">Image preview</h3>
             <p class="hint" id="previewModalCaption"></p>
           </div>
-          <span id="previewModalCounter" class="preview-modal-counter">1 / 1</span>
+          <div class="preview-modal-controls">
+            <button id="previewZoomOutBtn" class="mini-button" type="button" aria-label="Zoom out">−</button>
+            <span id="previewZoomLabel" class="preview-zoom-label">100%</span>
+            <button id="previewZoomInBtn" class="mini-button" type="button" aria-label="Zoom in">+</button>
+            <span class="control-sep"></span>
+            <button id="previewFitBtn" class="mini-button" type="button" aria-label="Fit to window">Fit</button>
+            <button id="previewResetBtn" class="mini-button" type="button" aria-label="Reset zoom">Reset</button>
+            <span id="previewModalCounter" class="preview-modal-counter">1 / 1</span>
+          </div>
         </div>
-        <div class="preview-image-shell">
+        <div class="preview-image-shell" id="previewImageContainer">
           <img id="previewModalImage" alt="" draggable="false">
         </div>
         <div class="preview-modal-actions">
@@ -235,5 +339,9 @@
   </div>
 
   <script src="app.js"></script>
+  <script type="module">
+    import { extractDocumentThumbnails, ALL_ACCEPT } from './js/doc-importer.js';
+    window.__docImporter = { extractDocumentThumbnails, ALL_ACCEPT };
+  </script>
 </body>
 </html>
