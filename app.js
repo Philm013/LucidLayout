@@ -3695,6 +3695,11 @@ function renderDocThumbnails() {
       e.stopPropagation();
       toggle();
     });
+    item.addEventListener('click', () => {
+      if (docImportState.activeIndex === idx) return;
+      docImportState.activeIndex = idx;
+      renderDocThumbnails();
+    });
     item.addEventListener('dblclick', () => {
       docImportState.activeIndex = idx;
       openDocLightbox(idx);
@@ -4007,11 +4012,18 @@ function resetPreviewZoom() {
 
 // ─── Lightbox Interactive Canvas ────────────────────────────────────
 function setupLightboxCanvasInteractions() {
-  if (!els.docLightboxContainer) return;
+  if (!els.docLightboxContainer || !els.docLightboxImage) return;
 
-  let panState = { active: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 };
+  const panState = {
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    startPanX: 0,
+    startPanY: 0,
+    moved: false
+  };
 
-  // Scroll wheel zoom
   els.docLightboxContainer.addEventListener('wheel', e => {
     if (!els.docLightboxModal?.classList.contains('show')) return;
     e.preventDefault();
@@ -4019,46 +4031,69 @@ function setupLightboxCanvasInteractions() {
     zoomLightbox(delta);
   }, { passive: false });
 
-  // Drag to pan (only when zoomed in)
-  els.docLightboxImage.addEventListener('mousedown', e => {
-    if (lightboxZoomState.zoom <= 1) return; // Don't pan at 1:1 zoom
+  els.docLightboxContainer.addEventListener('pointerdown', e => {
+    if (!els.docLightboxModal?.classList.contains('show')) return;
+    if (e.button !== 0) return;
     e.preventDefault();
     panState.active = true;
+    panState.pointerId = e.pointerId;
     panState.startX = e.clientX;
     panState.startY = e.clientY;
     panState.startPanX = lightboxZoomState.panX;
     panState.startPanY = lightboxZoomState.panY;
-    els.docLightboxImage.style.cursor = 'grabbing';
+    panState.moved = false;
+    els.docLightboxContainer.classList.add('grabbing');
+    els.docLightboxContainer.setPointerCapture(e.pointerId);
   });
 
-  document.addEventListener('mousemove', e => {
-    if (!panState.active || !els.docLightboxModal?.classList.contains('show')) return;
+  els.docLightboxContainer.addEventListener('pointermove', e => {
+    if (!panState.active || panState.pointerId !== e.pointerId) return;
     const deltaX = e.clientX - panState.startX;
     const deltaY = e.clientY - panState.startY;
+    if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+      panState.moved = true;
+    }
     lightboxZoomState.panX = panState.startPanX + deltaX;
     lightboxZoomState.panY = panState.startPanY + deltaY;
     updateLightboxTransform();
   });
 
-  document.addEventListener('mouseup', () => {
-    if (panState.active) {
-      panState.active = false;
-      els.docLightboxImage.style.cursor = 'grab';
-    }
-  });
+  const endPan = e => {
+    if (!panState.active || panState.pointerId !== e.pointerId) return;
+    panState.active = false;
+    panState.pointerId = null;
+    els.docLightboxContainer.classList.remove('grabbing');
+  };
 
-  // Prevent image selection
+  els.docLightboxContainer.addEventListener('pointerup', endPan);
+  els.docLightboxContainer.addEventListener('pointercancel', endPan);
+
+  els.docLightboxContainer.addEventListener('click', e => {
+    if (panState.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
+
+  els.docLightboxContainer.style.touchAction = 'none';
   els.docLightboxImage.style.userSelect = 'none';
   els.docLightboxImage.addEventListener('dragstart', e => e.preventDefault());
 }
 
 // ─── Preview Modal Interactive Canvas ────────────────────────────────
 function setupPreviewCanvasInteractions() {
-  if (!els.previewImageContainer) return;
+  if (!els.previewImageContainer || !els.previewModalImage) return;
 
-  let panState = { active: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 };
+  const panState = {
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    startPanX: 0,
+    startPanY: 0,
+    moved: false
+  };
 
-  // Scroll wheel zoom
   els.previewImageContainer.addEventListener('wheel', e => {
     if (!els.previewModal?.classList.contains('show')) return;
     e.preventDefault();
@@ -4066,35 +4101,51 @@ function setupPreviewCanvasInteractions() {
     zoomPreview(delta);
   }, { passive: false });
 
-  // Drag to pan (only when zoomed in)
-  els.previewModalImage.addEventListener('mousedown', e => {
-    if (previewZoomState.zoom <= 1) return; // Don't pan at 1:1 zoom
+  els.previewImageContainer.addEventListener('pointerdown', e => {
+    if (!els.previewModal?.classList.contains('show')) return;
+    if (e.button !== 0) return;
     e.preventDefault();
     panState.active = true;
+    panState.pointerId = e.pointerId;
     panState.startX = e.clientX;
     panState.startY = e.clientY;
     panState.startPanX = previewZoomState.panX;
     panState.startPanY = previewZoomState.panY;
-    els.previewModalImage.style.cursor = 'grabbing';
+    panState.moved = false;
+    els.previewImageContainer.classList.add('grabbing');
+    els.previewImageContainer.setPointerCapture(e.pointerId);
   });
 
-  document.addEventListener('mousemove', e => {
-    if (!panState.active || !els.previewModal?.classList.contains('show')) return;
+  els.previewImageContainer.addEventListener('pointermove', e => {
+    if (!panState.active || panState.pointerId !== e.pointerId) return;
     const deltaX = e.clientX - panState.startX;
     const deltaY = e.clientY - panState.startY;
+    if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+      panState.moved = true;
+    }
     previewZoomState.panX = panState.startPanX + deltaX;
     previewZoomState.panY = panState.startPanY + deltaY;
     updatePreviewTransform();
   });
 
-  document.addEventListener('mouseup', () => {
-    if (panState.active) {
-      panState.active = false;
-      els.previewModalImage.style.cursor = 'grab';
-    }
-  });
+  const endPan = e => {
+    if (!panState.active || panState.pointerId !== e.pointerId) return;
+    panState.active = false;
+    panState.pointerId = null;
+    els.previewImageContainer.classList.remove('grabbing');
+  };
 
-  // Prevent image selection
+  els.previewImageContainer.addEventListener('pointerup', endPan);
+  els.previewImageContainer.addEventListener('pointercancel', endPan);
+
+  els.previewImageContainer.addEventListener('click', e => {
+    if (panState.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
+
+  els.previewImageContainer.style.touchAction = 'none';
   els.previewModalImage.style.userSelect = 'none';
   els.previewModalImage.addEventListener('dragstart', e => e.preventDefault());
 
@@ -4615,6 +4666,7 @@ function initElements() {
   els.previewFitBtn = document.getElementById('previewFitBtn');
   els.previewResetBtn = document.getElementById('previewResetBtn');
   els.previewZoomLabel = document.getElementById('previewZoomLabel');
+  els.previewImageContainer = document.getElementById('previewImageContainer');
 
   els.dropCurtain = document.getElementById('dropCurtain');
   els.canvasViewport = document.getElementById('canvasViewport');
@@ -4705,6 +4757,7 @@ function initElements() {
   els.docLightboxFitBtn = document.getElementById('docLightboxFitBtn');
   els.docLightboxResetBtn = document.getElementById('docLightboxResetBtn');
   els.docLightboxZoomLabel = document.getElementById('docLightboxZoomLabel');
+  els.docLightboxContainer = document.getElementById('docLightboxContainer');
 
   // History elements
   els.undoBtn = document.getElementById('undoBtn');
