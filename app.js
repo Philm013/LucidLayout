@@ -4474,6 +4474,261 @@ function bindEvents() {
     }
   });
 
+  // ── Send to Lucid ───────────────────────────────────────────────────────
+  els.sendToLucidBtn?.addEventListener('click', async () => {
+    closeTopMenus();
+    const { loadLucidSettings } = window.__lucidExport || {};
+    if (!loadLucidSettings) {
+      showToast('Lucid export module not loaded yet — try again in a moment.');
+      return;
+    }
+    const settings = loadLucidSettings();
+    if (!settings.apiKey) {
+      showToast('Set your Lucid API key first (Export ▾ → Lucid API settings…)');
+      return;
+    }
+    const activeCount = state.grid.filter(Boolean).length;
+    if (activeCount === 0) {
+      showToast('Grid is empty — add images before sending to Lucid.');
+      return;
+    }
+    openLucidSendModal();
+  });
+
+  // ── Send to Lucid modal ─────────────────────────────────────────────────────
+  let lucidSendSelectedDoc = null; // { documentId, title, parent, editUrl }
+  let lucidSearchDebounce = null;
+
+  function openLucidSendModal() {
+    const { loadLucidSettings } = window.__lucidExport || {};
+    const settings = loadLucidSettings ? loadLucidSettings() : {};
+    lucidSendSelectedDoc = null;
+
+    if (els.lucidSendTitleInput) {
+      els.lucidSendTitleInput.value = settings.title || 'PNG Grid Export';
+    }
+    if (els.lucidDocSearchInput) els.lucidDocSearchInput.value = '';
+    if (els.lucidDocResults) { els.lucidDocResults.hidden = true; els.lucidDocResults.innerHTML = ''; }
+    if (els.lucidDocSelection) els.lucidDocSelection.hidden = true;
+    updateSendFolderNote();
+
+    els.lucidSendModal?.classList.add('show');
+    els.lucidSendModal?.removeAttribute('aria-hidden');
+    els.lucidSendTitleInput?.focus();
+  }
+
+  function closeLucidSendModal() {
+    els.lucidSendModal?.classList.remove('show');
+    els.lucidSendModal?.setAttribute('aria-hidden', 'true');
+  }
+
+  function updateSendFolderNote() {
+    if (!els.lucidSendFolderNote) return;
+    if (lucidSendSelectedDoc) {
+      els.lucidSendFolderNote.innerHTML =
+        `A new document will be created in the same folder as <strong>${escapeHtml(lucidSendSelectedDoc.title)}</strong>.`;
+    } else {
+      els.lucidSendFolderNote.innerHTML = 'A new document will be created in <strong>My Documents</strong>.';
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function renderDocResults(docs) {
+    if (!els.lucidDocResults) return;
+    if (!docs.length) {
+      els.lucidDocResults.innerHTML = '<p class="hint" style="padding:8px 10px;margin:0">No documents found.</p>';
+      els.lucidDocResults.hidden = false;
+      return;
+    }
+    els.lucidDocResults.innerHTML = docs.map(doc => {
+      const date = doc.lastModified ? new Date(doc.lastModified).toLocaleDateString() : '';
+      return `<div class="lucid-doc-result-item" role="option" tabindex="0"
+                   data-doc-id="${escapeHtml(doc.documentId)}"
+                   data-doc-title="${escapeHtml(doc.title)}"
+                   data-doc-parent="${doc.parent ?? ''}"
+                   data-doc-edit="${escapeHtml(doc.editUrl || '')}">
+                <span class="doc-result-title">${escapeHtml(doc.title)}</span>
+                <span class="doc-result-meta">${escapeHtml(doc.product || '')}${date ? ' · ' + date : ''}</span>
+              </div>`;
+    }).join('');
+    els.lucidDocResults.hidden = false;
+  }
+
+  async function runDocSearch() {
+    const { searchLucidDocs, loadLucidSettings } = window.__lucidExport || {};
+    if (!searchLucidDocs) return;
+    const settings = loadLucidSettings ? loadLucidSettings() : {};
+    if (!settings.apiKey) return;
+    const keywords = els.lucidDocSearchInput?.value.trim() || '';
+    const product = settings.product || 'lucidchart';
+
+    if (els.lucidDocResults) {
+      els.lucidDocResults.innerHTML = '<p class="hint" style="padding:8px 10px;margin:0">Searching…</p>';
+      els.lucidDocResults.hidden = false;
+    }
+    try {
+      const docs = await searchLucidDocs(settings.apiKey, keywords, product);
+      renderDocResults(docs);
+    } catch (err) {
+      if (els.lucidDocResults) {
+        els.lucidDocResults.innerHTML = `<p class="hint" style="padding:8px 10px;margin:0;color:#f87171">Error: ${escapeHtml(err.message)}</p>`;
+      }
+    }
+  }
+
+  els.lucidSendModal?.addEventListener('click', e => {
+    if (e.target === els.lucidSendModal) closeLucidSendModal();
+  });
+  els.lucidSendCancelBtn?.addEventListener('click', closeLucidSendModal);
+
+  els.lucidDocSearchInput?.addEventListener('input', () => {
+    clearTimeout(lucidSearchDebounce);
+    lucidSearchDebounce = setTimeout(runDocSearch, 400);
+  });
+
+  els.lucidDocSearchBtn?.addEventListener('click', () => {
+    clearTimeout(lucidSearchDebounce);
+    runDocSearch();
+  });
+
+  els.lucidDocSearchInput?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { clearTimeout(lucidSearchDebounce); runDocSearch(); }
+  });
+
+  els.lucidDocResults?.addEventListener('click', e => {
+    const item = e.target.closest('.lucid-doc-result-item');
+    if (!item) return;
+    lucidSendSelectedDoc = {
+      documentId: item.dataset.docId,
+      title: item.dataset.docTitle,
+      parent: item.dataset.docParent || null,
+      editUrl: item.dataset.docEdit
+    };
+    if (els.lucidDocSelectionLabel) {
+      els.lucidDocSelectionLabel.textContent = `Folder of: ${lucidSendSelectedDoc.title}`;
+    }
+    els.lucidDocResults.hidden = true;
+    els.lucidDocSelection.hidden = false;
+    updateSendFolderNote();
+  });
+
+  els.lucidDocResults?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      const item = e.target.closest('.lucid-doc-result-item');
+      if (item) item.click();
+    }
+  });
+
+  els.lucidDocClearBtn?.addEventListener('click', () => {
+    lucidSendSelectedDoc = null;
+    els.lucidDocSelection.hidden = true;
+    els.lucidDocResults.hidden = true;
+    els.lucidDocResults.innerHTML = '';
+    if (els.lucidDocSearchInput) els.lucidDocSearchInput.value = '';
+    updateSendFolderNote();
+  });
+
+  els.lucidSendConfirmBtn?.addEventListener('click', async () => {
+    const { sendGridToLucid, loadLucidSettings, getLucidDoc } = window.__lucidExport || {};
+    if (!sendGridToLucid) return;
+    const settings = loadLucidSettings ? loadLucidSettings() : {};
+    const title = els.lucidSendTitleInput?.value.trim() || settings.title || 'PNG Grid Export';
+
+    // Resolve parent folder: if user selected a doc, use that doc's parent folder
+    let parentFolderId = null;
+    if (lucidSendSelectedDoc) {
+      if (lucidSendSelectedDoc.parent) {
+        parentFolderId = lucidSendSelectedDoc.parent;
+      } else if (getLucidDoc) {
+        // parent wasn't in search results — fetch it now
+        try {
+          const doc = await getLucidDoc(settings.apiKey, lucidSendSelectedDoc.documentId);
+          parentFolderId = doc.parent ?? null;
+        } catch { /* fall through to My Documents */ }
+      }
+    }
+
+    els.lucidSendConfirmBtn.disabled = true;
+    const originalLabel = els.lucidSendConfirmBtn.textContent;
+    const setLabel = (t) => { if (els.lucidSendConfirmBtn) els.lucidSendConfirmBtn.textContent = t; };
+
+    try {
+      const result = await sendGridToLucid(
+        {
+          grid: state.grid,
+          rows: state.rows,
+          cols: state.cols,
+          cellWidth: state.cellWidth,
+          cellHeight: state.cellHeight,
+          gapX: state.gapX,
+          gapY: state.gapY,
+          assets: state.assets
+        },
+        {
+          apiKey: settings.apiKey,
+          title,
+          product: settings.product || 'lucidchart',
+          parentFolderId
+        },
+        setLabel
+      );
+      closeLucidSendModal();
+      showToast(`Sent! Opening in Lucid…`);
+      window.open(result.editUrl, '_blank', 'noopener');
+    } catch (err) {
+      showToast(`Lucid error: ${err.message}`);
+      console.error('[send-to-lucid]', err);
+    } finally {
+      els.lucidSendConfirmBtn.disabled = false;
+      els.lucidSendConfirmBtn.textContent = originalLabel;
+    }
+  });
+
+  // ── Lucid settings modal ─────────────────────────────────────────────────
+  function openLucidSettings() {
+    closeTopMenus();
+    const { loadLucidSettings } = window.__lucidExport || {};
+    const settings = loadLucidSettings ? loadLucidSettings() : {};
+    if (els.lucidApiKeyInput) els.lucidApiKeyInput.value = settings.apiKey || '';
+    if (els.lucidDocTitleInput) els.lucidDocTitleInput.value = settings.title || '';
+    if (els.lucidProductSelect) els.lucidProductSelect.value = settings.product || 'lucidchart';
+    els.lucidSettingsModal?.classList.add('show');
+    els.lucidSettingsModal?.removeAttribute('aria-hidden');
+    els.lucidApiKeyInput?.focus();
+  }
+
+  function closeLucidSettings() {
+    els.lucidSettingsModal?.classList.remove('show');
+    els.lucidSettingsModal?.setAttribute('aria-hidden', 'true');
+  }
+
+  els.lucidSettingsBtn?.addEventListener('click', () => openLucidSettings());
+
+  els.lucidSettingsCancelBtn?.addEventListener('click', closeLucidSettings);
+
+  els.lucidSettingsModal?.addEventListener('click', (e) => {
+    if (e.target === els.lucidSettingsModal) closeLucidSettings();
+  });
+
+  els.lucidSettingsSaveBtn?.addEventListener('click', () => {
+    const { saveLucidSettings } = window.__lucidExport || {};
+    if (!saveLucidSettings) return;
+    const apiKey = els.lucidApiKeyInput?.value.trim() || '';
+    const title = els.lucidDocTitleInput?.value.trim() || '';
+    const product = els.lucidProductSelect?.value || 'lucidchart';
+    if (!apiKey) {
+      showToast('API key cannot be empty.');
+      els.lucidApiKeyInput?.focus();
+      return;
+    }
+    saveLucidSettings({ apiKey, title, product });
+    closeLucidSettings();
+    showToast('Lucid API settings saved.');
+  });
+
   els.previewCloseBtn.addEventListener('click', closePreviewModal);
   els.previewPrevBtn.addEventListener('click', () => stepPreview(-1));
   els.previewNextBtn.addEventListener('click', () => stepPreview(1));
@@ -4767,6 +5022,29 @@ function initElements() {
   els.historyCloseBtn = document.getElementById('historyCloseBtn');
   els.historyClearBtn = document.getElementById('historyClearBtn');
   els.historyTimeline = document.getElementById('historyTimeline');
+
+  // Lucid direct-send elements
+  els.sendToLucidBtn = document.getElementById('sendToLucidBtn');
+  els.lucidSettingsBtn = document.getElementById('lucidSettingsBtn');
+  els.lucidSettingsModal = document.getElementById('lucidSettingsModal');
+  els.lucidApiKeyInput = document.getElementById('lucidApiKeyInput');
+  els.lucidDocTitleInput = document.getElementById('lucidDocTitleInput');
+  els.lucidProductSelect = document.getElementById('lucidProductSelect');
+  els.lucidSettingsCancelBtn = document.getElementById('lucidSettingsCancelBtn');
+  els.lucidSettingsSaveBtn = document.getElementById('lucidSettingsSaveBtn');
+
+  // Lucid send modal elements
+  els.lucidSendModal = document.getElementById('lucidSendModal');
+  els.lucidSendTitleInput = document.getElementById('lucidSendTitleInput');
+  els.lucidDocSearchInput = document.getElementById('lucidDocSearchInput');
+  els.lucidDocSearchBtn = document.getElementById('lucidDocSearchBtn');
+  els.lucidDocResults = document.getElementById('lucidDocResults');
+  els.lucidDocSelection = document.getElementById('lucidDocSelection');
+  els.lucidDocSelectionLabel = document.getElementById('lucidDocSelectionLabel');
+  els.lucidDocClearBtn = document.getElementById('lucidDocClearBtn');
+  els.lucidSendFolderNote = document.getElementById('lucidSendFolderNote');
+  els.lucidSendCancelBtn = document.getElementById('lucidSendCancelBtn');
+  els.lucidSendConfirmBtn = document.getElementById('lucidSendConfirmBtn');
 }
 
 async function init() {
