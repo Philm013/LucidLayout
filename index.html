@@ -10,6 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <!-- JSZip for building .lucid ZIP in the browser -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -86,6 +88,9 @@
                 <button id="exportMenuBtn" class="button button-primary" type="button" aria-haspopup="true" aria-expanded="false">Export ▾</button>
                 <div id="exportMenu" class="menu-pop menu-pop-right" hidden>
                   <button id="copyLucidBtn" class="menu-item" type="button">Copy for Lucidchart</button>
+                  <button id="sendToLucidBtn" class="menu-item" type="button">Send to Lucid ↑</button>
+                  <button id="lucidSettingsBtn" class="menu-item" type="button">Lucid API settings…</button>
+                  <hr class="menu-divider">
                   <button id="copyPngBtn" class="menu-item" type="button">Copy preview PNG</button>
                   <button id="downloadPngBtn" class="menu-item" type="button">Download PNG preview</button>
                 </div>
@@ -338,10 +343,77 @@
     </div>
   </div>
 
+  <!-- Send to Lucid modal -->
+  <div id="lucidSendModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="lucidSendTitle" style="max-width:520px">
+      <h3 id="lucidSendTitle">Send to Lucid</h3>
+
+      <div class="field-grid">
+        <label>
+          <span>Document title</span>
+          <input id="lucidSendTitleInput" type="text" placeholder="PNG Grid Export">
+        </label>
+      </div>
+
+      <div style="margin-top:12px">
+        <p class="hint" style="margin-bottom:6px">Destination folder</p>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <input id="lucidDocSearchInput" type="search" placeholder="Search your Lucid docs to pick a folder…" style="flex:1">
+          <button id="lucidDocSearchBtn" class="mini-button" type="button">Search</button>
+        </div>
+        <div id="lucidDocResults" class="lucid-doc-results" hidden></div>
+        <div id="lucidDocSelection" class="lucid-doc-selection" hidden>
+          <span id="lucidDocSelectionLabel"></span>
+          <button id="lucidDocClearBtn" class="mini-button" type="button" aria-label="Clear selection">✕</button>
+        </div>
+        <p id="lucidSendFolderNote" class="hint" style="margin-top:4px">
+          A new document will be created in <strong>My Documents</strong>.
+        </p>
+      </div>
+
+      <div class="modal-actions" style="margin-top:16px">
+        <button id="lucidSendCancelBtn" class="button" type="button">Cancel</button>
+        <button id="lucidSendConfirmBtn" class="button button-primary" type="button">Send ↑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lucid settings modal -->
+  <div id="lucidSettingsModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="lucidSettingsTitle">
+      <h3 id="lucidSettingsTitle">Lucid API Settings</h3>
+      <p class="hint">Your API key is stored locally in this browser and sent only to the local proxy server — it is never sent directly to Lucid from the page.</p>
+      <div class="field-grid">
+        <label>
+          <span>API Key</span>
+          <input id="lucidApiKeyInput" type="password" placeholder="Paste your Lucid API key…" autocomplete="off">
+        </label>
+        <label>
+          <span>Default document title</span>
+          <input id="lucidDocTitleInput" type="text" placeholder="PNG Grid Export">
+        </label>
+        <label>
+          <span>Product</span>
+          <select id="lucidProductSelect">
+            <option value="lucidchart">Lucidchart</option>
+            <option value="lucidspark">Lucidspark</option>
+          </select>
+        </label>
+      </div>
+      <p class="hint">Need an API key? Go to <a href="https://lucid.app/developer" target="_blank" rel="noopener">lucid.app/developer</a>, create an app, and generate an API key with the <strong>DocumentEdit</strong> grant.</p>
+      <div class="modal-actions">
+        <button id="lucidSettingsCancelBtn" class="button" type="button">Cancel</button>
+        <button id="lucidSettingsSaveBtn" class="button button-primary" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
   <script type="module">
     import { extractDocumentThumbnails, ALL_ACCEPT } from './js/doc-importer.js';
     window.__docImporter = { extractDocumentThumbnails, ALL_ACCEPT };
+    import { sendGridToLucid, loadLucidSettings, saveLucidSettings, searchLucidDocs, getLucidDoc } from './js/lucid-export.js';
+    window.__lucidExport = { sendGridToLucid, loadLucidSettings, saveLucidSettings, searchLucidDocs, getLucidDoc };
   </script>
 </body>
 </html>

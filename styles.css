@@ -998,6 +998,42 @@ input[type="number"]::-webkit-inner-spin-button {
   border: 0;
 }
 
+.lucid-doc-results {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: calc(8px * var(--ui-scale));
+  background: var(--surface);
+}
+
+.lucid-doc-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: calc(7px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  cursor: pointer;
+  border-bottom: 1px solid var(--panel-border);
+  transition: background 0.12s;
+}
+.lucid-doc-result-item:last-child { border-bottom: none; }
+.lucid-doc-result-item:hover,
+.lucid-doc-result-item:focus { background: var(--hover); outline: none; }
+.lucid-doc-result-item .doc-result-title { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.lucid-doc-result-item .doc-result-meta  { font-size: 0.75rem; color: var(--muted); }
+
+.lucid-doc-selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));
+  border: 1px solid var(--panel-border);
+  border-radius: calc(8px * var(--ui-scale));
+  background: var(--surface);
+  font-size: 0.82rem;
+  color: var(--text);
+}
+.lucid-doc-selection span { flex: 1; }
+
 .toast {
   position: fixed;
   right: calc(12px * var(--ui-scale));
