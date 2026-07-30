@@ -789,7 +789,26 @@ function renderSheetCanvas(sheet, sheetName, sheetNum) {
  */
 export async function extractDocumentThumbnails(file, opts = {}) {
   const { onProgress, signal } = opts;
-  const arrayBuffer = await file.arrayBuffer();
+
+  if (file.size === 0) {
+    throw new Error(
+      `"${file.name}" appears to be empty (0 bytes). If this file lives in a cloud-sync folder ` +
+      `(OneDrive/Dropbox/Google Drive) and shows a cloud icon, drag-and-drop can hand the browser an ` +
+      `unhydrated placeholder. Open the file once locally (or use "click to browse" instead of dragging) and try again.`
+    );
+  }
+
+  let arrayBuffer;
+  try {
+    arrayBuffer = await file.arrayBuffer();
+  } catch (err) {
+    throw new Error(
+      `Could not read "${file.name}" (${err.message}). If this file is only available online in a ` +
+      `cloud-sync folder (OneDrive/Dropbox), it may not have downloaded yet — drag-and-drop doesn't force a ` +
+      `download the way the file picker does. Try opening/downloading it first, or use "click to browse".`
+    );
+  }
+
   const magic = detectFormat(arrayBuffer);
   const ext = extensionHint(file.name);
 
