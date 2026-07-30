@@ -4,8 +4,88 @@ const WINDOW_NAME_SESSION_PREFIX = 'png-grid-session-v1:';
 const SESSION_DB_NAME = 'png-grid-session-db';
 const SESSION_DB_STORE = 'kv';
 const SESSION_DB_VERSION = 1;
+const SHRINK_MODE_STORAGE_KEY = 'png-grid-shrink-mode';
 
 let sessionDbPromise = null;
+
+function loadShrinkMode() {
+  try {
+    return localStorage.getItem(SHRINK_MODE_STORAGE_KEY) === 'reflow' ? 'reflow' : 'trim';
+  } catch {
+    return 'trim';
+  }
+}
+
+function saveShrinkMode(mode) {
+  try {
+    localStorage.setItem(SHRINK_MODE_STORAGE_KEY, mode);
+  } catch {
+    // localStorage can be unavailable in some privacy contexts; ignore.
+  }
+}
+
+const UI_SCALE_STORAGE_KEY = 'png-grid-ui-scale';
+const UI_SCALE_MIN = 0.75;
+const UI_SCALE_MAX = 1.5;
+
+function loadUiScalePreference() {
+  try {
+    const raw = localStorage.getItem(UI_SCALE_STORAGE_KEY);
+    if (raw === null) return 1;
+    const stored = Number(raw);
+    if (Number.isFinite(stored)) return clamp(stored, UI_SCALE_MIN, UI_SCALE_MAX);
+  } catch {
+    // localStorage can be unavailable in some privacy contexts; ignore.
+  }
+  return 1;
+}
+
+function saveUiScalePreference(scale) {
+  try {
+    localStorage.setItem(UI_SCALE_STORAGE_KEY, String(scale));
+  } catch {
+    // localStorage can be unavailable in some privacy contexts; ignore.
+  }
+}
+
+const EXPORT_LOG_STORAGE_KEY = 'png-grid-export-log';
+const EXPORT_LOG_MAX_ENTRIES = 50;
+
+function loadExportLog() {
+  try {
+    const raw = localStorage.getItem(EXPORT_LOG_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveExportLog(log) {
+  try {
+    localStorage.setItem(EXPORT_LOG_STORAGE_KEY, JSON.stringify(log.slice(0, EXPORT_LOG_MAX_ENTRIES)));
+  } catch {
+    // localStorage can be unavailable in some privacy contexts; ignore.
+  }
+}
+
+function addExportLogEntry(result) {
+  const entry = {
+    documentId: result?.documentId ?? null,
+    title: result?.title ?? 'Untitled',
+    editUrl: result?.editUrl ?? null,
+    viewUrl: result?.viewUrl ?? null,
+    product: result?.product ?? null,
+    version: result?.version ?? null,
+    pageCount: result?.pageCount ?? null,
+    created: result?.created ?? new Date().toISOString()
+  };
+  const log = loadExportLog();
+  log.unshift(entry);
+  saveExportLog(log);
+  return log;
+}
 
 const state = {
   assets: [],
@@ -18,6 +98,8 @@ const state = {
   cellHeight: 120,
   textSize: 12,
   fit: 'contain',
+  shrinkMode: 'trim',
+  uiScalePreference: 1,
   canvasWidth: 1280,
   canvasHeight: 720,
   contentOffsetX: 0,
@@ -33,6 +115,8 @@ const state = {
   pendingGridSequence: null,
   pendingGridIsLayout: false,
   pendingGridPlacementOffset: 0,
+  pendingOverflowInitialRows: null,
+  pendingOverflowInitialCols: null,
   dragPayload: null,
   dropDepth: 0,
   lastDragExpandAt: 0,
@@ -289,7 +373,7 @@ function updateSizeLabel(inputId, labelId) {
   label.textContent = getSizeLabel(type, value);
 }
 
-function showToast(message) {
+function showToast(message, duration = 2200) {
   if (!els.toast) return;
   els.toast.textContent = message;
   els.toast.classList.add('show');
@@ -301,7 +385,7 @@ function showToast(message) {
   }
   toastTimer = setTimeout(() => {
     els.toast.classList.remove('show');
-  }, 2200);
+  }, duration);
 }
 
 function showDragTooltip(clientX, clientY, mode, text) {
@@ -378,8 +462,14 @@ function resizeGridWithDirectionalExpansion({ left = 0, right = 0, top = 0, bott
   }
 
   const metrics = getLayoutMetrics();
-  const nextCols = clamp(state.cols + addCols, 1, GRID_LIMIT);
-  const nextRows = clamp(state.rows + addRows, 1, GRID_LIMIT);
+  // No upper bound here: GRID_LIMIT is only a UI-stepper/search-window
+  // constant, not a real grid-size cap (see restoreSession() above). Clamping
+  // the *absolute* next size to GRID_LIMIT used to silently shrink any grid
+  // already larger than 20 rows/cols (e.g. from Auto Pack on a big import)
+  // down to 20 the moment a drag-to-edge auto-expand added even one more
+  // row/column — this only ever grows the grid, so just floor at 1.
+  const nextCols = Math.max(1, state.cols + addCols);
+  const nextRows = Math.max(1, state.rows + addRows);
   const actualColsAdded = nextCols - state.cols;
   const actualRowsAdded = nextRows - state.rows;
   if (actualColsAdded === 0 && actualRowsAdded === 0) {
@@ -697,8 +787,11 @@ async function restoreSession() {
     if (!saved) return false;
 
     state.assets = Array.isArray(saved.assets) ? saved.assets : [];
-    state.rows = clamp(Number(saved.rows || 3), 1, GRID_LIMIT);
-    state.cols = clamp(Number(saved.cols || 3), 1, GRID_LIMIT);
+    // No upper bound here: GRID_LIMIT is only a UI-stepper/search-window
+    // constant, not a real grid-size cap. Clamping to it on restore used to
+    // silently truncate large auto-fit grids (e.g. 4x72 -> 4x20) on refresh.
+    state.rows = Math.max(1, Math.round(Number(saved.rows || 3)) || 3);
+    state.cols = Math.max(1, Math.round(Number(saved.cols || 3)) || 3);
     const legacyGap = clamp(Number(saved.gap || 12), 0, 120);
     state.gapX = clamp(Number(saved.gapX ?? legacyGap), 0, 120);
     state.gapY = clamp(Number(saved.gapY ?? legacyGap), 0, 120);
@@ -779,7 +872,7 @@ function updateViewportLayout() {
   const targetHeight = 940;
   const widthScale = window.innerWidth / targetWidth;
   const heightScale = window.innerHeight / targetHeight;
-  const uiScale = clamp(Math.min(widthScale, heightScale), 0.68, 1);
+  const uiScale = clamp(Math.min(widthScale, heightScale), 0.68, 1) * state.uiScalePreference;
   document.documentElement.style.setProperty('--ui-scale', uiScale.toFixed(4));
 
   if (!els.appShell) return;
@@ -856,11 +949,15 @@ function capacityForDims(rows, cols, firstRowOffset = 0) {
 function recommendedDims(count, firstRowOffset = 0) {
   if (count <= 0) return { rows: 1, cols: 1 };
   let best = null;
-  const minCols = Math.min(GRID_LIMIT, Math.max(1, Number(firstRowOffset) + 1));
+  const minCols = Math.max(1, Number(firstRowOffset) + 1);
+  // Search a range wide enough to find a good square-ish fit for any asset
+  // count, instead of being artificially capped at GRID_LIMIT — a large
+  // import (e.g. a 300-page PDF) should still get a sensible recommendation.
+  const idealSide = Math.ceil(Math.sqrt(count));
+  const maxCols = Math.max(GRID_LIMIT, idealSide * 2, minCols);
 
-  for (let cols = minCols; cols <= GRID_LIMIT; cols += 1) {
+  for (let cols = minCols; cols <= maxCols; cols += 1) {
     const rows = minRowsForCols(cols, count, firstRowOffset);
-    if (rows < 1 || rows > GRID_LIMIT) continue;
     const area = rows * cols;
     const aspectDelta = Math.abs(rows - cols);
     // Weight aspect ratio more heavily (prefer square layouts)
@@ -872,7 +969,7 @@ function recommendedDims(count, firstRowOffset = 0) {
   }
 
   if (!best) {
-    return { rows: GRID_LIMIT, cols: GRID_LIMIT };
+    return { rows: count, cols: 1 };
   }
 
   const rows = best.rows;
@@ -895,16 +992,14 @@ function minRowsForCols(cols, count, firstRowOffset = 0) {
 function minColsForRows(rows, count, firstRowOffset = 0) {
   const safeRows = Math.max(1, Number(rows) || 1);
   const required = Math.max(0, Number(count) || 0);
-  if (required === 0) return 1;
-  const minCols = Math.min(GRID_LIMIT, Math.max(1, Number(firstRowOffset) + 1));
+  const offset = Math.max(0, Number(firstRowOffset) || 0);
+  const minCols = Math.max(1, offset + 1);
+  if (required === 0) return minCols;
 
-  for (let cols = minCols; cols <= GRID_LIMIT; cols += 1) {
-    if (capacityForDims(safeRows, cols, firstRowOffset) >= required) {
-      return cols;
-    }
-  }
-
-  return GRID_LIMIT;
+  // capacityForDims(rows, cols, offset) === safeRows * cols - offset for any
+  // cols > offset, so solve for the smallest cols that satisfies capacity >= required.
+  const neededCols = Math.ceil((required + offset) / safeRows);
+  return Math.max(minCols, neededCols);
 }
 
 function allAssignedIds(gridValues) {
@@ -933,6 +1028,7 @@ function resizeGridPreserve(newRows, newCols) {
   }
 
   const survivors = allAssignedIds(oldGrid);
+  const overflow = [];
   for (const id of survivors) {
     let alreadyPlaced = false;
     for (const v of newGrid) {
@@ -943,12 +1039,17 @@ function resizeGridPreserve(newRows, newCols) {
     }
     if (alreadyPlaced) continue;
     const empty = newGrid.findIndex(v => v === null);
-    if (empty >= 0) newGrid[empty] = id;
+    if (empty >= 0) {
+      newGrid[empty] = id;
+    } else {
+      overflow.push(id);
+    }
   }
 
   state.rows = newRows;
   state.cols = newCols;
   state.grid = newGrid;
+  return overflow;
 }
 
 async function loadImage(src) {
@@ -1697,6 +1798,40 @@ function removeColumnAt(colIndex) {
   showToast(`Removed column ${colIndex + 1}`);
 }
 
+// "Reflow" counterparts to removeRowAt/removeColumnAt: instead of trimming the
+// last row/column straight to the Image Tray, grow the other dimension just
+// enough to keep every image on the grid, matching the same behavior direct
+// number-input edits already use (see applyNumberSettings).
+function reflowShrinkRows() {
+  const nextRows = Math.max(1, state.rows - 1);
+  const required = state.assets.length;
+  const nextCols = required > 0 ? minColsForRows(nextRows, required) : state.cols;
+  pushHistory(`Decrease rows to ${nextRows} (reflow)`);
+  const overflowIds = resizeGridPreserve(nextRows, nextCols);
+  if (overflowIds.length > 0) {
+    pushAssetsToHolding(overflowIds);
+    showToast(`${overflowIds.length} image${overflowIds.length === 1 ? '' : 's'} didn't fit and ${overflowIds.length === 1 ? 'was' : 'were'} staged in the Image Tray.`);
+  } else {
+    showToast(nextCols !== state.cols ? `Rows reduced to ${nextRows}; columns adjusted to ${nextCols} to fit all images` : `Rows reduced to ${nextRows}`);
+  }
+  renderAll();
+}
+
+function reflowShrinkCols() {
+  const nextCols = Math.max(1, state.cols - 1);
+  const required = state.assets.length;
+  const nextRows = required > 0 ? minRowsForCols(nextCols, required) : state.rows;
+  pushHistory(`Decrease columns to ${nextCols} (reflow)`);
+  const overflowIds = resizeGridPreserve(nextRows, nextCols);
+  if (overflowIds.length > 0) {
+    pushAssetsToHolding(overflowIds);
+    showToast(`${overflowIds.length} image${overflowIds.length === 1 ? '' : 's'} didn't fit and ${overflowIds.length === 1 ? 'was' : 'were'} staged in the Image Tray.`);
+  } else {
+    showToast(nextRows !== state.rows ? `Columns reduced to ${nextCols}; rows adjusted to ${nextRows} to fit all images` : `Columns reduced to ${nextCols}`);
+  }
+  renderAll();
+}
+
 function beginAutoExpandSession() {
   if (!state.dragPayload) return;
   if (!['slot', 'group', 'asset'].includes(state.dragPayload.type)) return;
@@ -2410,7 +2545,10 @@ function buildSvgMarkup() {
 function buildLucidContentPayload() {
   const metrics = getLayoutMetrics();
 
-  const scale = 10;
+  const { loadLucidSettings } = window.__lucidExport || {};
+  const lucidSettings = loadLucidSettings ? loadLucidSettings() : {};
+  const imageScale = clamp(Number(lucidSettings.imageScale) || 100, 25, 400) / 100;
+  const scale = 10 * imageScale;
   const base = { x: 10000, y: 1000 };
   const objects = [];
   const copiedItemIds = [];
@@ -2697,30 +2835,24 @@ function applyNumberSettings() {
   state.cellHeight = clamp(Number(els.cellHeightInput.value || 120), 40, 500);
   state.fit = 'contain';
 
-  let nextRows = clamp(Number(els.rowsInput.value || 1), 1, GRID_LIMIT);
-  let nextCols = clamp(Number(els.colsInput.value || 1), 1, GRID_LIMIT);
+  let nextRows = Math.max(1, Number(els.rowsInput.value) || 1);
+  let nextCols = Math.max(1, Number(els.colsInput.value) || 1);
   const required = state.assets.length;
   
   // Detect which dimension the user changed
   const colsChanged = nextCols !== prevCols;
   const rowsChanged = nextRows !== prevRows;
   
-  if (required > 0) {
+  if (required > 0 && state.shrinkMode === 'reflow') {
     if (rowsChanged && !colsChanged) {
-      // User changed rows, recalculate minimum columns needed for those rows
+      // User changed rows explicitly - keep that value fixed and grow columns
+      // to fit everyone, with no upper limit.
       nextCols = minColsForRows(nextRows, required);
-      if (nextCols > GRID_LIMIT) {
-        nextCols = GRID_LIMIT;
-        nextRows = minRowsForCols(nextCols, required);
-      }
       showToast('Columns adjusted to fit all images');
     } else if (colsChanged && !rowsChanged) {
-      // User changed columns, recalculate minimum rows needed for those columns
+      // User changed columns explicitly - keep that value fixed and grow rows
+      // to fit everyone, with no upper limit.
       nextRows = minRowsForCols(nextCols, required);
-      if (nextRows > GRID_LIMIT) {
-        nextRows = GRID_LIMIT;
-        nextCols = minColsForRows(nextRows, required);
-      }
       showToast('Rows adjusted to fit all images');
     }
   }
@@ -2737,7 +2869,13 @@ function applyNumberSettings() {
     pushHistory('Manual layout settings change');
   }
 
-  resizeGridPreserve(nextRows, nextCols);
+  const overflowIds = resizeGridPreserve(nextRows, nextCols);
+
+  if (overflowIds.length > 0) {
+    pushAssetsToHolding(overflowIds);
+    showToast(`${overflowIds.length} image${overflowIds.length === 1 ? '' : 's'} didn't fit and ${overflowIds.length === 1 ? 'was' : 'were'} staged in the Image Tray.`);
+  }
+
   renderAll();
 }
 
@@ -2774,7 +2912,7 @@ function toggleMenu(menuEl, buttonEl) {
 }
 
 function getOpenModalElement() {
-  const ordered = [els.docLightboxModal, els.docImportModal, els.historyModal, els.replaceOptionsModal, els.importModeModal, els.overflowModal];
+  const ordered = [els.docLightboxModal, els.docImportModal, els.historyModal, els.exportLogModal, els.replaceOptionsModal, els.importModeModal, els.overflowModal];
   for (const modal of ordered) {
     if (modal?.classList.contains('show')) return modal;
   }
@@ -2864,6 +3002,8 @@ function handleOpenModalKeydown(event) {
       showToast('Resize cancelled');
     } else if (openModalEl === els.historyModal) {
       closeModal(els.historyModal);
+    } else if (openModalEl === els.exportLogModal) {
+      closeModal(els.exportLogModal);
     } else if (openModalEl === els.docLightboxModal) {
       closeDocLightbox();
     } else if (openModalEl === els.docImportModal) {
@@ -2902,23 +3042,16 @@ function resolveReplaceGridDimensions(assetCount, firstRowOffset, sizingMode = '
     rows = minRowsForCols(cols, assetCount, firstRowOffset);
   } else if (mode === 'current-rows') {
     cols = minColsForRows(rows, assetCount, firstRowOffset);
+  } else if (mode === 'custom') {
+    // Auto-grow rows to fit everyone at the user's chosen column count, but
+    // never shrink below what the user explicitly entered. No upper cap —
+    // extra rows are added instead of overflowing into the Image Tray.
+    rows = Math.max(rows, minRowsForCols(cols, assetCount, firstRowOffset));
   }
 
-  rows = clamp(rows, 1, GRID_LIMIT);
-  cols = clamp(cols, Math.max(1, firstRowOffset + 1), GRID_LIMIT);
+  rows = Math.max(1, rows);
+  cols = Math.max(1, firstRowOffset + 1, cols);
 
-  if (mode !== 'keep-current') {
-    if (capacityForDims(rows, cols, firstRowOffset) < assetCount) {
-      rows = minRowsForCols(cols, assetCount, firstRowOffset);
-      if (rows > GRID_LIMIT) {
-        rows = GRID_LIMIT;
-        cols = minColsForRows(rows, assetCount, firstRowOffset);
-      }
-    }
-  }
-
-  rows = clamp(rows, 1, GRID_LIMIT);
-  cols = clamp(cols, Math.max(1, firstRowOffset + 1), GRID_LIMIT);
   return {
     rows,
     cols,
@@ -2931,12 +3064,12 @@ function populateReplaceOffsetOptions() {
   if (!els.replaceOffsetSelect) return;
   const count = state.pendingReplaceFiles?.length || 0;
   const sizingMode = els.replaceSizingSelect?.value || 'recommended';
-  const customCols = clamp(Number(els.replaceColsSelect?.value || state.cols), 1, GRID_LIMIT);
-  const customRows = clamp(Number(els.replaceRowsSelect?.value || state.rows), 1, GRID_LIMIT);
+  const customCols = Math.max(1, Number(els.replaceColsSelect?.value) || state.cols);
+  const customRows = Math.max(1, Number(els.replaceRowsSelect?.value) || state.rows);
   const baseDims = count > 0
     ? resolveReplaceGridDimensions(count, 0, sizingMode, customRows, customCols)
     : { cols: sizingMode === 'custom' ? customCols : state.cols };
-  const maxStartCol = clamp(baseDims.cols, 1, GRID_LIMIT);
+  const maxStartCol = Math.max(1, baseDims.cols || 1);
   const currentValue = clamp(Number(els.replaceOffsetSelect.value || 1), 1, maxStartCol);
   els.replaceOffsetSelect.innerHTML = '';
   for (let col = 1; col <= maxStartCol; col += 1) {
@@ -2951,23 +3084,8 @@ function populateReplaceOffsetOptions() {
 function populateReplaceDimensionOptions() {
   if (!els.replaceRowsSelect || !els.replaceColsSelect) return;
 
-  const currentRows = clamp(Number(els.replaceRowsSelect.value || state.rows), 1, GRID_LIMIT);
-  const currentCols = clamp(Number(els.replaceColsSelect.value || state.cols), 1, GRID_LIMIT);
-
-  els.replaceRowsSelect.innerHTML = '';
-  els.replaceColsSelect.innerHTML = '';
-
-  for (let i = 1; i <= GRID_LIMIT; i += 1) {
-    const rowOption = document.createElement('option');
-    rowOption.value = String(i);
-    rowOption.textContent = String(i);
-    els.replaceRowsSelect.appendChild(rowOption);
-
-    const colOption = document.createElement('option');
-    colOption.value = String(i);
-    colOption.textContent = String(i);
-    els.replaceColsSelect.appendChild(colOption);
-  }
+  const currentRows = Math.max(1, Number(els.replaceRowsSelect.value) || state.rows);
+  const currentCols = Math.max(1, Number(els.replaceColsSelect.value) || state.cols);
 
   els.replaceRowsSelect.value = String(currentRows);
   els.replaceColsSelect.value = String(currentCols);
@@ -2978,11 +3096,11 @@ function updateReplaceOptionsSummary() {
   const count = files.length;
   if (!count || !els.replaceOffsetSelect) return;
 
-  const startCol = clamp(Number(els.replaceOffsetSelect.value || 1), 1, GRID_LIMIT);
+  const startCol = Math.max(1, Number(els.replaceOffsetSelect.value) || 1);
   const sizingMode = els.replaceSizingSelect?.value || 'recommended';
   const firstRowOffset = startCol - 1;
-  const customRows = clamp(Number(els.replaceRowsSelect?.value || state.rows), 1, GRID_LIMIT);
-  const customCols = clamp(Number(els.replaceColsSelect?.value || state.cols), 1, GRID_LIMIT);
+  const customRows = Math.max(1, Number(els.replaceRowsSelect?.value) || state.rows);
+  const customCols = Math.max(1, Number(els.replaceColsSelect?.value) || state.cols);
   const rec = recommendedDims(count, firstRowOffset);
   const minRowsCurrentCols = minRowsForCols(Math.max(1, state.cols), count, firstRowOffset);
   const minColsCurrentRows = minColsForRows(Math.max(1, state.rows), count, firstRowOffset);
@@ -3041,10 +3159,14 @@ function openOverflowModal(assetCount, firstRowOffset = 0) {
   state.overflowModalOpen = true;
   state.pendingGridPlacementOffset = normalizeFirstRowOffset(firstRowOffset, state.cols);
   const startCol = state.pendingGridPlacementOffset + 1;
+  const initialCols = Math.max(state.cols, rec.cols);
+  const initialRows = Math.max(state.rows, rec.rows);
+  state.pendingOverflowInitialCols = initialCols;
+  state.pendingOverflowInitialRows = initialRows;
   els.overflowMessage.textContent = `${assetCount} images were imported, but the current grid has ${state.grid.length} spaces.`;
   els.overflowRecommendation.textContent = `Recommended size (offset starts at column ${startCol}): ${rec.cols} x ${rec.rows}.`;
-  els.overflowColsInput.value = String(Math.max(state.cols, rec.cols));
-  els.overflowRowsInput.value = String(Math.max(state.rows, rec.rows));
+  els.overflowColsInput.value = String(initialCols);
+  els.overflowRowsInput.value = String(initialRows);
   openModal(els.overflowModal);
 }
 
@@ -3080,8 +3202,8 @@ async function executeImportMode(files, mode, selectedIndex = state.selectedSlot
   if (mode === 'replace') {
     const requestedFirstRowOffset = Math.max(0, Number(options.firstRowOffset || 0));
     const replaceSizing = options.replaceSizing || 'recommended';
-    const customRows = clamp(Number(options.customRows || state.rows), 1, GRID_LIMIT);
-    const customCols = clamp(Number(options.customCols || state.cols), 1, GRID_LIMIT);
+    const customRows = Math.max(1, Number(options.customRows) || state.rows);
+    const customCols = Math.max(1, Number(options.customCols) || state.cols);
     state.assets = nextAssets;
     state.holdingAssetIds = [];
     const sequence = nextIds.slice();
@@ -3186,22 +3308,34 @@ function closeOverflowModal() {
 
 function applyOverflowDimensions() {
   const required = state.pendingGridSequence?.length || state.assets.length;
-  let cols = clamp(Number(els.overflowColsInput.value || 1), 1, GRID_LIMIT);
-  let rows = clamp(Number(els.overflowRowsInput.value || 1), 1, GRID_LIMIT);
+  let cols = Math.max(1, Number(els.overflowColsInput.value) || 1);
+  let rows = Math.max(1, Number(els.overflowRowsInput.value) || 1);
   const rawOffset = Math.max(0, Number(state.pendingGridPlacementOffset) || 0);
-  cols = Math.max(cols, Math.min(GRID_LIMIT, rawOffset + 1));
+  cols = Math.max(cols, rawOffset + 1);
   const firstRowOffset = normalizeFirstRowOffset(rawOffset, cols);
 
-  if (capacityForDims(rows, cols, firstRowOffset) < required) {
-    rows = minRowsForCols(cols, required, firstRowOffset);
-    if (rows > GRID_LIMIT) {
-      rows = GRID_LIMIT;
-      cols = minColsForRows(rows, required, firstRowOffset);
+  // Detect which field the user actually edited so we know which axis to
+  // treat as fixed, then grow the other one — with no upper limit — to fit
+  // everyone instead of leaving a shortfall that gets staged in the tray.
+  const colsChanged = cols !== state.pendingOverflowInitialCols;
+  const rowsChanged = rows !== state.pendingOverflowInitialRows;
+
+  if (required > 0) {
+    if (rowsChanged && !colsChanged) {
+      cols = Math.max(cols, minColsForRows(rows, required, firstRowOffset));
+    } else {
+      rows = Math.max(rows, minRowsForCols(cols, required, firstRowOffset));
     }
   }
 
+  const capacity = capacityForDims(rows, cols, firstRowOffset);
+
   resizeGridPreserve(rows, cols);
+  let overflowIds = [];
   if (state.pendingGridSequence && state.pendingGridSequence.length > 0) {
+    if (state.pendingGridSequence.length > capacity) {
+      overflowIds = state.pendingGridSequence.slice(capacity);
+    }
     if (state.pendingGridIsLayout) {
       placeLayoutInGrid(state.pendingGridSequence);
     } else {
@@ -3214,9 +3348,18 @@ function applyOverflowDimensions() {
   state.pendingGridSequence = null;
   state.pendingGridIsLayout = false;
   state.pendingGridPlacementOffset = 0;
+  state.pendingOverflowInitialRows = null;
+  state.pendingOverflowInitialCols = null;
   closeOverflowModal();
-  renderAll();
-  showToast(`Grid resized to ${cols} x ${rows}`);
+
+  if (overflowIds.length > 0) {
+    pushAssetsToHolding(overflowIds);
+    renderAll();
+    showToast(`Grid resized to ${cols} x ${rows}. ${overflowIds.length} image${overflowIds.length === 1 ? '' : 's'} didn't fit and ${overflowIds.length === 1 ? 'was' : 'were'} staged in the Image Tray.`);
+  } else {
+    renderAll();
+    showToast(`Grid resized to ${cols} x ${rows}`);
+  }
 }
 
 async function readDirectoryEntry(entry, collected) {
@@ -4295,11 +4438,11 @@ function bindEvents() {
 
   els.replaceApplyBtn?.addEventListener('click', async () => {
     const files = state.pendingReplaceFiles || [];
-    const startCol = clamp(Number(els.replaceOffsetSelect?.value || 1), 1, GRID_LIMIT);
+    const startCol = Math.max(1, Number(els.replaceOffsetSelect?.value) || 1);
     const firstRowOffset = startCol - 1;
     const replaceSizing = els.replaceSizingSelect?.value || 'recommended';
-    const customRows = clamp(Number(els.replaceRowsSelect?.value || state.rows), 1, GRID_LIMIT);
-    const customCols = clamp(Number(els.replaceColsSelect?.value || state.cols), 1, GRID_LIMIT);
+    const customRows = Math.max(1, Number(els.replaceRowsSelect?.value) || state.rows);
+    const customCols = Math.max(1, Number(els.replaceColsSelect?.value) || state.cols);
     closeReplaceOptionsModal();
     state.pendingReplaceFiles = null;
     state.pendingImportFiles = null;
@@ -4361,24 +4504,42 @@ function bindEvents() {
 
   els.rowsUpBtn.addEventListener('click', () => {
     pushHistory(`Increase rows to ${state.rows + 1}`);
-    resizeGridPreserve(clamp(state.rows + 1, 1, GRID_LIMIT), state.cols);
+    // Math.max, not clamp to GRID_LIMIT: GRID_LIMIT is only a UI-stepper
+    // constant, not a real cap, and clamping the absolute next value used to
+    // shrink any grid already larger than 20 rows down to 20 on a single +
+    // click.
+    resizeGridPreserve(Math.max(1, state.rows + 1), state.cols);
     renderAll();
   });
 
   els.rowsDownBtn.addEventListener('click', () => {
     if (state.rows <= 1) return;
-    removeRowAt(state.rows - 1);
+    if (state.shrinkMode === 'reflow') {
+      reflowShrinkRows();
+    } else {
+      removeRowAt(state.rows - 1);
+    }
   });
 
   els.colsUpBtn.addEventListener('click', () => {
     pushHistory(`Increase columns to ${state.cols + 1}`);
-    resizeGridPreserve(state.rows, clamp(state.cols + 1, 1, GRID_LIMIT));
+    // See rowsUpBtn above: GRID_LIMIT must never clamp an already-larger grid.
+    resizeGridPreserve(state.rows, Math.max(1, state.cols + 1));
     renderAll();
   });
 
   els.colsDownBtn.addEventListener('click', () => {
     if (state.cols <= 1) return;
-    removeColumnAt(state.cols - 1);
+    if (state.shrinkMode === 'reflow') {
+      reflowShrinkCols();
+    } else {
+      removeColumnAt(state.cols - 1);
+    }
+  });
+
+  els.shrinkModeSelect?.addEventListener('change', () => {
+    state.shrinkMode = els.shrinkModeSelect.value === 'reflow' ? 'reflow' : 'trim';
+    saveShrinkMode(state.shrinkMode);
   });
 
   els.autoPackBtn.addEventListener('click', () => {
@@ -4671,15 +4832,22 @@ function bindEvents() {
           apiKey: settings.apiKey,
           title,
           product: settings.product || 'lucidchart',
-          parentFolderId
+          parentFolderId,
+          imageScale: clamp(Number(settings.imageScale) || 100, 25, 400) / 100,
+          compressImages: settings.compressImages !== false,
+          compressionLevel: settings.compressionLevel || 'balanced',
+          compressionFormat: settings.compressionFormat || 'auto',
+          customQuality: settings.customQuality,
+          customMaxDimension: settings.customMaxDimension
         },
         setLabel
       );
       closeLucidSendModal();
-      showToast(`Sent! Opening in Lucid…`);
+      addExportLogEntry(result);
+      showToast(`Sent! Opening in Lucid… (see 📤 Exports for the link)`);
       window.open(result.editUrl, '_blank', 'noopener');
     } catch (err) {
-      showToast(`Lucid error: ${err.message}`);
+      showToast(`Lucid error: ${err.message}`, 12000);
       console.error('[send-to-lucid]', err);
     } finally {
       els.lucidSendConfirmBtn.disabled = false;
@@ -4688,13 +4856,47 @@ function bindEvents() {
   });
 
   // ── Lucid settings modal ─────────────────────────────────────────────────
+  function updateCustomCompressionVisibility() {
+    const isCustom = els.lucidCompressionLevelSelect?.value === 'custom';
+    if (els.lucidCustomCompressionFields) els.lucidCustomCompressionFields.style.display = isCustom ? '' : 'none';
+  }
+
+  els.lucidCompressionLevelSelect?.addEventListener('change', updateCustomCompressionVisibility);
+  els.lucidCustomQualityInput?.addEventListener('input', () => {
+    if (els.lucidCustomQualityValue) els.lucidCustomQualityValue.textContent = els.lucidCustomQualityInput.value;
+  });
+
+  // UI scale is a display preference, not a Lucid export setting — apply and
+  // persist it immediately as the slider moves, independent of the modal's
+  // Save/Cancel buttons (which only govern the Lucid API fields below it).
+  els.uiScaleInput?.addEventListener('input', () => {
+    const pct = clamp(Number(els.uiScaleInput.value) || 100, UI_SCALE_MIN * 100, UI_SCALE_MAX * 100);
+    if (els.uiScaleValue) els.uiScaleValue.textContent = String(pct);
+    state.uiScalePreference = pct / 100;
+    saveUiScalePreference(state.uiScalePreference);
+    updateViewportLayout();
+  });
+
   function openLucidSettings() {
     closeTopMenus();
     const { loadLucidSettings } = window.__lucidExport || {};
     const settings = loadLucidSettings ? loadLucidSettings() : {};
+    const uiScalePct = Math.round(state.uiScalePreference * 100);
+    if (els.uiScaleInput) els.uiScaleInput.value = uiScalePct;
+    if (els.uiScaleValue) els.uiScaleValue.textContent = String(uiScalePct);
     if (els.lucidApiKeyInput) els.lucidApiKeyInput.value = settings.apiKey || '';
     if (els.lucidDocTitleInput) els.lucidDocTitleInput.value = settings.title || '';
     if (els.lucidProductSelect) els.lucidProductSelect.value = settings.product || 'lucidchart';
+    const imageScalePct = clamp(Number(settings.imageScale) || 100, 25, 400);
+    if (els.lucidImageScaleInput) els.lucidImageScaleInput.value = imageScalePct;
+    if (els.lucidImageScaleValue) els.lucidImageScaleValue.textContent = String(imageScalePct);
+    if (els.lucidCompressImagesInput) els.lucidCompressImagesInput.checked = settings.compressImages !== false;
+    if (els.lucidCompressionFormatSelect) els.lucidCompressionFormatSelect.value = settings.compressionFormat || 'auto';
+    if (els.lucidCompressionLevelSelect) els.lucidCompressionLevelSelect.value = settings.compressionLevel || 'balanced';
+    if (els.lucidCustomQualityInput) els.lucidCustomQualityInput.value = settings.customQuality ?? 80;
+    if (els.lucidCustomQualityValue) els.lucidCustomQualityValue.textContent = String(settings.customQuality ?? 80);
+    if (els.lucidCustomMaxDimensionInput) els.lucidCustomMaxDimensionInput.value = settings.customMaxDimension ?? 1800;
+    updateCustomCompressionVisibility();
     els.lucidSettingsModal?.classList.add('show');
     els.lucidSettingsModal?.removeAttribute('aria-hidden');
     els.lucidApiKeyInput?.focus();
@@ -4706,6 +4908,10 @@ function bindEvents() {
   }
 
   els.lucidSettingsBtn?.addEventListener('click', () => openLucidSettings());
+
+  els.lucidImageScaleInput?.addEventListener('input', () => {
+    if (els.lucidImageScaleValue) els.lucidImageScaleValue.textContent = els.lucidImageScaleInput.value;
+  });
 
   els.lucidSettingsCancelBtn?.addEventListener('click', closeLucidSettings);
 
@@ -4719,12 +4925,18 @@ function bindEvents() {
     const apiKey = els.lucidApiKeyInput?.value.trim() || '';
     const title = els.lucidDocTitleInput?.value.trim() || '';
     const product = els.lucidProductSelect?.value || 'lucidchart';
+    const imageScale = clamp(Number(els.lucidImageScaleInput?.value) || 100, 25, 400);
+    const compressImages = els.lucidCompressImagesInput ? els.lucidCompressImagesInput.checked : true;
+    const compressionFormat = els.lucidCompressionFormatSelect?.value || 'auto';
+    const compressionLevel = els.lucidCompressionLevelSelect?.value || 'balanced';
+    const customQuality = clamp(Number(els.lucidCustomQualityInput?.value) || 80, 1, 100);
+    const customMaxDimension = clamp(Number(els.lucidCustomMaxDimensionInput?.value) || 1800, 200, 4000);
     if (!apiKey) {
       showToast('API key cannot be empty.');
       els.lucidApiKeyInput?.focus();
       return;
     }
-    saveLucidSettings({ apiKey, title, product });
+    saveLucidSettings({ apiKey, title, product, imageScale, compressImages, compressionFormat, compressionLevel, customQuality, customMaxDimension });
     closeLucidSettings();
     showToast('Lucid API settings saved.');
   });
@@ -4770,6 +4982,29 @@ function bindEvents() {
   els.historyModal.addEventListener('click', event => {
     if (event.target === els.historyModal) {
       closeModal(els.historyModal);
+    }
+  });
+
+  els.exportLogBtn?.addEventListener('click', () => {
+    renderExportLog();
+    openModal(els.exportLogModal);
+  });
+
+  els.exportLogCloseBtn?.addEventListener('click', () => {
+    closeModal(els.exportLogModal);
+  });
+
+  els.exportLogClearBtn?.addEventListener('click', () => {
+    if (confirm('Clear the export log? This cannot be undone.')) {
+      saveExportLog([]);
+      renderExportLog();
+      showToast('Export log cleared');
+    }
+  });
+
+  els.exportLogModal?.addEventListener('click', event => {
+    if (event.target === els.exportLogModal) {
+      closeModal(els.exportLogModal);
     }
   });
 
@@ -4858,6 +5093,34 @@ function renderHistoryTimeline() {
   });
 }
 
+function renderExportLog() {
+  const container = els.exportLogList || document.getElementById('exportLogList');
+  if (!container) return;
+
+  const log = loadExportLog();
+  if (log.length === 0) {
+    container.innerHTML = '<p class="export-log-empty">No exports yet — use Export ▾ → Send to Lucid to create one.</p>';
+    return;
+  }
+
+  container.innerHTML = log.map(entry => {
+    const dateStr = entry.created ? new Date(entry.created).toLocaleString() : '';
+    const editLink = entry.editUrl
+      ? `<a class="mini-button" href="${escapeHtmlAttr(entry.editUrl)}" target="_blank" rel="noopener">Edit</a>`
+      : '';
+    const viewLink = entry.viewUrl
+      ? `<a class="mini-button" href="${escapeHtmlAttr(entry.viewUrl)}" target="_blank" rel="noopener">View</a>`
+      : '';
+    return `<div class="export-log-item">
+        <div class="export-log-info">
+          <span class="export-log-title">${escapeHtmlAttr(entry.title || 'Untitled')}</span>
+          <span class="export-log-meta">${escapeHtmlAttr(entry.product || '')}${dateStr ? ' · ' + escapeHtmlAttr(dateStr) : ''}</span>
+        </div>
+        <div class="export-log-actions">${editLink}${viewLink}</div>
+      </div>`;
+  }).join('');
+}
+
 async function renderAll() {
   normalizeGridReferences();
   renderHoldingTray();
@@ -4885,6 +5148,7 @@ function initElements() {
 
   els.rowsInput = document.getElementById('rowsInput');
   els.colsInput = document.getElementById('colsInput');
+  els.shrinkModeSelect = document.getElementById('shrinkModeSelect');
   els.gapXInput = document.getElementById('gapXInput');
   els.gapYInput = document.getElementById('gapYInput');
   els.fitModeInput = document.getElementById('fitModeInput');
@@ -5022,14 +5286,30 @@ function initElements() {
   els.historyCloseBtn = document.getElementById('historyCloseBtn');
   els.historyClearBtn = document.getElementById('historyClearBtn');
   els.historyTimeline = document.getElementById('historyTimeline');
+  els.exportLogBtn = document.getElementById('exportLogBtn');
+  els.exportLogModal = document.getElementById('exportLogModal');
+  els.exportLogList = document.getElementById('exportLogList');
+  els.exportLogClearBtn = document.getElementById('exportLogClearBtn');
+  els.exportLogCloseBtn = document.getElementById('exportLogCloseBtn');
 
   // Lucid direct-send elements
   els.sendToLucidBtn = document.getElementById('sendToLucidBtn');
   els.lucidSettingsBtn = document.getElementById('lucidSettingsBtn');
   els.lucidSettingsModal = document.getElementById('lucidSettingsModal');
+  els.uiScaleInput = document.getElementById('uiScaleInput');
+  els.uiScaleValue = document.getElementById('uiScaleValue');
   els.lucidApiKeyInput = document.getElementById('lucidApiKeyInput');
   els.lucidDocTitleInput = document.getElementById('lucidDocTitleInput');
   els.lucidProductSelect = document.getElementById('lucidProductSelect');
+  els.lucidImageScaleInput = document.getElementById('lucidImageScaleInput');
+  els.lucidImageScaleValue = document.getElementById('lucidImageScaleValue');
+  els.lucidCompressImagesInput = document.getElementById('lucidCompressImagesInput');
+  els.lucidCompressionFormatSelect = document.getElementById('lucidCompressionFormatSelect');
+  els.lucidCompressionLevelSelect = document.getElementById('lucidCompressionLevelSelect');
+  els.lucidCustomCompressionFields = document.getElementById('lucidCustomCompressionFields');
+  els.lucidCustomQualityInput = document.getElementById('lucidCustomQualityInput');
+  els.lucidCustomQualityValue = document.getElementById('lucidCustomQualityValue');
+  els.lucidCustomMaxDimensionInput = document.getElementById('lucidCustomMaxDimensionInput');
   els.lucidSettingsCancelBtn = document.getElementById('lucidSettingsCancelBtn');
   els.lucidSettingsSaveBtn = document.getElementById('lucidSettingsSaveBtn');
 
@@ -5049,6 +5329,9 @@ function initElements() {
 
 async function init() {
   initElements();
+  state.shrinkMode = loadShrinkMode();
+  if (els.shrinkModeSelect) els.shrinkModeSelect.value = state.shrinkMode;
+  state.uiScalePreference = loadUiScalePreference();
   updateViewportLayout();
   state.controlsOpen = true;
   setControlsOpen(true);
