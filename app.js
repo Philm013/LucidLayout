@@ -3,8 +3,20 @@ const SESSION_STORAGE_KEY = 'png-grid-session-v1';
 const WINDOW_NAME_SESSION_PREFIX = 'png-grid-session-v1:';
 const SESSION_DB_NAME = 'png-grid-session-db';
 const SESSION_DB_STORE = 'kv';
-const SESSION_DB_VERSION = 1;
+// Full-resolution originals live here, keyed by asset id, so `state.assets`
+// only ever has to carry a small thumbnail in memory (see THUMB_MAX_DIM).
+const ASSET_BLOB_STORE = 'assetBlobs';
+const SESSION_DB_VERSION = 2;
 const SHRINK_MODE_STORAGE_KEY = 'png-grid-shrink-mode';
+
+// Longest edge, in pixels, for the in-memory/grid-display thumbnail generated
+// for every imported image. Grid cells, the holding tray, and history
+// timeline previews all render this thumbnail instead of the original file,
+// which is what actually keeps tab memory and pan/zoom smooth with dozens of
+// large photos on the grid. Full-resolution bytes are never dropped — they're
+// stored in IndexedDB (ASSET_BLOB_STORE) and pulled back on demand for
+// export/copy operations (PNG, SVG, Lucid) and the single-image preview.
+const THUMB_MAX_DIM = 900;
 
 let sessionDbPromise = null;
 
@@ -146,7 +158,13 @@ function captureStateSnapshot(label = 'Action') {
     timestamp: Date.now(),
     label,
     state: {
-      assets: JSON.parse(JSON.stringify(state.assets)),
+      // Asset objects are never mutated in place after creation (only ever
+      // replaced/added/removed as whole objects), so a shallow copy of the
+      // array is enough here — deep-cloning via JSON used to re-serialize
+      // every thumbnail on every single undo-tracked action (up to
+      // HISTORY_MAX_SIZE times over), which was a major source of bloated
+      // tab memory.
+      assets: state.assets.slice(),
       grid: state.grid.slice(),
       rows: state.rows,
       cols: state.cols,
@@ -172,7 +190,7 @@ function restoreStateSnapshot(snapshot) {
   if (!snapshot || !snapshot.state) return false;
   
   const s = snapshot.state;
-  state.assets = JSON.parse(JSON.stringify(s.assets));
+  state.assets = s.assets.slice();
   state.grid = s.grid.slice();
   state.rows = s.rows;
   state.cols = s.cols;
@@ -673,6 +691,9 @@ function openSessionDatabase() {
       if (!db.objectStoreNames.contains(SESSION_DB_STORE)) {
         db.createObjectStore(SESSION_DB_STORE);
       }
+      if (!db.objectStoreNames.contains(ASSET_BLOB_STORE)) {
+        db.createObjectStore(ASSET_BLOB_STORE);
+      }
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -680,6 +701,164 @@ function openSessionDatabase() {
   });
 
   return sessionDbPromise;
+}
+
+// ── Full-resolution asset storage (IndexedDB) ────────────────────────────────
+// These hold the original, full-quality file bytes for every imported image.
+// `state.assets` (and history/session snapshots of it) never carries this
+// data directly — only a small `thumbUrl`. Callers pull the real bytes back
+// out, on demand, right before an export/copy/full-preview needs them.
+
+async function writeAssetBlob(id, blob) {
+  try {
+    const db = await openSessionDatabase();
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(ASSET_BLOB_STORE, 'readwrite');
+      transaction.objectStore(ASSET_BLOB_STORE).put(blob, id);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error('IndexedDB asset write failed'));
+    });
+  } catch {
+    // IndexedDB can be unavailable in some file:// or privacy contexts; the
+    // asset simply stays thumbnail-only (export falls back to the thumbnail).
+  }
+}
+
+async function readAssetBlob(id) {
+  try {
+    const db = await openSessionDatabase();
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction(ASSET_BLOB_STORE, 'readonly');
+      const request = transaction.objectStore(ASSET_BLOB_STORE).get(id);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error || new Error('IndexedDB asset read failed'));
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function deleteAssetBlobs(ids) {
+  if (!ids || ids.length === 0) return;
+  try {
+    const db = await openSessionDatabase();
+    await new Promise((resolve, reject) => {
+      const transaction = db.transaction(ASSET_BLOB_STORE, 'readwrite');
+      const store = transaction.objectStore(ASSET_BLOB_STORE);
+      for (const id of ids) store.delete(id);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error('IndexedDB asset delete failed'));
+    });
+  } catch {
+    // best-effort cleanup only
+  }
+}
+
+// Deletes any stored blob whose asset id is no longer referenced by the
+// current assets list *or* by anything still reachable via undo/redo, so
+// removing/replacing images can't silently break Ctrl+Z fidelity.
+async function pruneOrphanedAssetBlobs() {
+  try {
+    const db = await openSessionDatabase();
+    const referenced = new Set(state.assets.map(asset => asset.id));
+    for (const snapshot of history.undoStack) {
+      for (const asset of snapshot.state.assets) referenced.add(asset.id);
+    }
+    for (const snapshot of history.redoStack) {
+      for (const asset of snapshot.state.assets) referenced.add(asset.id);
+    }
+
+    const allKeys = await new Promise((resolve, reject) => {
+      const transaction = db.transaction(ASSET_BLOB_STORE, 'readonly');
+      const request = transaction.objectStore(ASSET_BLOB_STORE).getAllKeys();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error || new Error('IndexedDB key scan failed'));
+    });
+
+    const orphaned = allKeys.filter(key => !referenced.has(key));
+    if (orphaned.length > 0) {
+      await deleteAssetBlobs(orphaned);
+    }
+  } catch {
+    // best-effort cleanup only
+  }
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Resolves the true full-resolution data URL for one asset, falling back to
+// its thumbnail if the original was never stored (e.g. IndexedDB unavailable).
+async function getFullResDataUrl(assetId) {
+  const asset = findAssetById(assetId);
+  if (!asset) return null;
+  const blob = await readAssetBlob(assetId);
+  if (!blob) return asset.thumbUrl || null;
+  try {
+    return await blobToDataUrl(blob);
+  } catch {
+    return asset.thumbUrl || null;
+  }
+}
+
+// Batch form of getFullResDataUrl, used right before export/copy operations
+// that need several assets at once (only reads each unique id once).
+async function getFullResDataUrls(assetIds) {
+  const uniqueIds = [...new Set(assetIds)];
+  const entries = await Promise.all(uniqueIds.map(async id => [id, await getFullResDataUrl(id)]));
+  return new Map(entries);
+}
+
+// Same idea, but returns short-lived Object URLs (cheaper than base64 data
+// URLs) for drawing full-resolution images onto a canvas. Callers must
+// revoke every URL in the returned map once done.
+async function getFullResObjectUrls(assetIds) {
+  const uniqueIds = [...new Set(assetIds)];
+  const entries = await Promise.all(uniqueIds.map(async id => {
+    const blob = await readAssetBlob(id);
+    return [id, blob ? URL.createObjectURL(blob) : null];
+  }));
+  return new Map(entries);
+}
+
+// Loads an image without adding it to the shared `imageCache` — used for
+// one-off, full-resolution decodes (thumbnail generation, full-res export)
+// so large decoded bitmaps aren't kept alive indefinitely.
+function loadImageOnce(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// Downscales a decoded image to THUMB_MAX_DIM (longest edge) and returns a
+// small data URL for grid/tray display. PNG is kept for anything that isn't
+// already a lossy JPEG so transparency (icons, diagrams, etc. — the whole
+// point of a "PNG Grid") survives; the dimension downscale is what actually
+// saves the memory, not the encoding.
+function createThumbnail(image, mimeType) {
+  const longestEdge = Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height);
+  const scale = Math.min(1, THUMB_MAX_DIM / Math.max(1, longestEdge));
+  const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+  const height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(image, 0, 0, width, height);
+
+  return mimeType === 'image/jpeg'
+    ? canvas.toDataURL('image/jpeg', 0.85)
+    : canvas.toDataURL('image/png');
 }
 
 async function readSessionPayloadFromIndexedDb() {
@@ -1196,6 +1375,7 @@ function removeAssetFromHolding(assetId) {
 function removeAssetFromTray(assetId) {
   state.holdingAssetIds = state.holdingAssetIds.filter(id => id !== assetId);
   state.assets = state.assets.filter(asset => asset.id !== assetId);
+  void pruneOrphanedAssetBlobs();
   renderAll();
   showToast('Image removed from tray');
 }
@@ -1211,6 +1391,7 @@ function clearHoldingTray() {
   const idsToRemove = new Set(state.holdingAssetIds);
   state.holdingAssetIds = [];
   state.assets = state.assets.filter(asset => !idsToRemove.has(asset.id));
+  void pruneOrphanedAssetBlobs();
   renderAll();
   showToast('Tray cleared');
 }
@@ -1249,7 +1430,7 @@ function renderHoldingTray() {
     tile.setAttribute('aria-label', `Drag ${asset.name} to place`);
 
     const img = document.createElement('img');
-    img.src = asset.dataUrl;
+    img.src = asset.thumbUrl;
     img.alt = '';
     img.draggable = false;
     tile.appendChild(img);
@@ -1295,22 +1476,27 @@ function renderHoldingTray() {
 
 async function fileToAsset(file) {
   const importKey = `${file.name}::${file.size}::${file.lastModified}`;
-  const dataUrl = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+  const objectUrl = URL.createObjectURL(file);
+  let image;
+  try {
+    image = await loadImageOnce(objectUrl);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 
-  const image = await loadImage(dataUrl);
+  const id = uid();
+  const thumbUrl = createThumbnail(image, file.type);
+  // Full-resolution original stored out-of-band in IndexedDB; `state.assets`
+  // only ever holds the (much smaller) thumbnail from here on.
+  await writeAssetBlob(id, file);
 
   return {
-    id: uid(),
+    id,
     name: file.name,
     size: file.size,
     lastModified: file.lastModified,
     importKey,
-    dataUrl,
+    thumbUrl,
     width: image.naturalWidth,
     height: image.naturalHeight
   };
@@ -2111,14 +2297,27 @@ function getPreviewSlotIndices() {
   return indices;
 }
 
+// Object URL currently backing the full-resolution preview image, if any.
+// Revoked whenever the preview closes or moves to a different image so the
+// decoded full-size bitmap isn't kept alive longer than it's on screen.
+let previewObjectUrl = null;
+
+function releasePreviewObjectUrl() {
+  if (previewObjectUrl) {
+    URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl = null;
+  }
+}
+
 function closePreviewModal() {
   state.previewModalOpen = false;
   state.previewSlotIndex = null;
+  releasePreviewObjectUrl();
   els.previewModal.classList.remove('show');
   els.previewModal.setAttribute('aria-hidden', 'true');
 }
 
-function syncPreviewModal() {
+async function syncPreviewModal() {
   if (!state.previewModalOpen) return;
   const sequence = getPreviewSlotIndices();
   if (sequence.length === 0) {
@@ -2139,7 +2338,11 @@ function syncPreviewModal() {
     return;
   }
 
-  els.previewModalImage.src = asset.dataUrl;
+  // Show the thumbnail immediately, then upgrade to full resolution (pulled
+  // from IndexedDB) once it's ready \u2014 avoids blocking the modal open on a
+  // potentially large IndexedDB read/decode.
+  releasePreviewObjectUrl();
+  els.previewModalImage.src = asset.thumbUrl;
   els.previewModalImage.alt = asset.name;
   els.previewModalTitle.textContent = asset.name;
   const slotRow = Math.floor(slotIndex / state.cols) + 1;
@@ -2150,6 +2353,14 @@ function syncPreviewModal() {
   els.previewNextBtn.disabled = sequence.length <= 1;
   els.previewModal.classList.add('show');
   els.previewModal.setAttribute('aria-hidden', 'false');
+
+  const blob = await readAssetBlob(assetId);
+  // Bail if the modal moved on (closed / different slot) while we were
+  // reading IndexedDB.
+  if (!blob || !state.previewModalOpen || state.previewSlotIndex !== slotIndex) return;
+  const objectUrl = URL.createObjectURL(blob);
+  previewObjectUrl = objectUrl;
+  els.previewModalImage.src = objectUrl;
 }
 
 function openPreviewModal(slotIndex) {
@@ -2260,7 +2471,7 @@ function createGridCell(assetId, index, frame) {
     if (asset) {
       const img = document.createElement('img');
       img.className = 'grid-cell-image';
-      img.src = asset.dataUrl;
+      img.src = asset.thumbUrl;
       img.alt = asset.name;
       img.draggable = false;
       // Let the browser decode off the main thread and defer offscreen
@@ -2477,7 +2688,13 @@ function renderGrid() {
   applyCanvasTransform();
 }
 
-async function drawLayoutToCanvas(canvas) {
+// Draws the current layout onto `canvas`. By default this uses each asset's
+// small in-memory thumbnail (fast, used for the Lucid-paste fallback preview
+// image and the history timeline thumbnails). Pass `{ fullRes: true }` for
+// real exports (PNG copy/download) \u2014 this pulls each used asset's original
+// bytes out of IndexedDB as a short-lived Object URL, draws it, then revokes
+// it immediately, so full-resolution bitmaps are never kept resident.
+async function drawLayoutToCanvas(canvas, { fullRes = false } = {}) {
   const metrics = getLayoutMetrics();
   canvas.width = metrics.width;
   canvas.height = metrics.height;
@@ -2487,35 +2704,49 @@ async function drawLayoutToCanvas(canvas) {
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  for (let i = 0; i < state.grid.length; i += 1) {
-    const row = Math.floor(i / state.cols);
-    const col = i % state.cols;
-    const x = metrics.offsetX + col * (metrics.cellWidth + state.gapX);
-    const y = metrics.offsetY + row * (metrics.cellHeight + state.gapY);
+  const fullResUrls = fullRes
+    ? await getFullResObjectUrls(state.grid.filter(Boolean))
+    : null;
 
-    ctx.fillStyle = '#f3f7fc';
-    ctx.fillRect(x, y, metrics.cellWidth, metrics.cellHeight);
+  try {
+    for (let i = 0; i < state.grid.length; i += 1) {
+      const row = Math.floor(i / state.cols);
+      const col = i % state.cols;
+      const x = metrics.offsetX + col * (metrics.cellWidth + state.gapX);
+      const y = metrics.offsetY + row * (metrics.cellHeight + state.gapY);
 
-    const assetId = state.grid[i];
-    if (!assetId) {
-      ctx.strokeStyle = '#d2deee';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, metrics.cellWidth, metrics.cellHeight);
-      continue;
+      ctx.fillStyle = '#f3f7fc';
+      ctx.fillRect(x, y, metrics.cellWidth, metrics.cellHeight);
+
+      const assetId = state.grid[i];
+      if (!assetId) {
+        ctx.strokeStyle = '#d2deee';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, metrics.cellWidth, metrics.cellHeight);
+        continue;
+      }
+
+      const asset = findAssetById(assetId);
+      if (!asset) continue;
+
+      const image = fullRes
+        ? await loadImageOnce(fullResUrls.get(assetId) || asset.thumbUrl)
+        : await loadImage(asset.thumbUrl);
+      const rect = objectFitRect({ x, y, width: metrics.cellWidth, height: metrics.cellHeight }, image, state.fit);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, metrics.cellWidth, metrics.cellHeight);
+      ctx.clip();
+      ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height);
+      ctx.restore();
     }
-
-    const asset = findAssetById(assetId);
-    if (!asset) continue;
-
-    const image = await loadImage(asset.dataUrl);
-    const rect = objectFitRect({ x, y, width: metrics.cellWidth, height: metrics.cellHeight }, image, state.fit);
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, y, metrics.cellWidth, metrics.cellHeight);
-    ctx.clip();
-    ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height);
-    ctx.restore();
+  } finally {
+    if (fullResUrls) {
+      for (const url of fullResUrls.values()) {
+        if (url) URL.revokeObjectURL(url);
+      }
+    }
   }
 }
 
@@ -2523,11 +2754,12 @@ async function renderPreview() {
   await drawLayoutToCanvas(els.previewCanvas);
 }
 
-function buildSvgMarkup() {
+async function buildSvgMarkup() {
   const metrics = getLayoutMetrics();
 
   const defs = [];
   const imageNodes = [];
+  const fullResUrls = await getFullResDataUrls(state.grid.filter(Boolean));
 
   for (let i = 0; i < state.grid.length; i += 1) {
     const row = Math.floor(i / state.cols);
@@ -2548,8 +2780,9 @@ function buildSvgMarkup() {
     if (!asset) continue;
 
     const fitRect = objectFitRect({ x, y, width: metrics.cellWidth, height: metrics.cellHeight }, { width: asset.width, height: asset.height }, state.fit);
+    const href = fullResUrls.get(assetId) || asset.thumbUrl;
     imageNodes.push(`<rect x="${x}" y="${y}" width="${metrics.cellWidth}" height="${metrics.cellHeight}" fill="#f3f7fc"/>`);
-    imageNodes.push(`<image href="${asset.dataUrl}" x="${fitRect.x}" y="${fitRect.y}" width="${fitRect.width}" height="${fitRect.height}" clip-path="url(#${clipId})" preserveAspectRatio="none"/>`);
+    imageNodes.push(`<image href="${href}" x="${fitRect.x}" y="${fitRect.y}" width="${fitRect.width}" height="${fitRect.height}" clip-path="url(#${clipId})" preserveAspectRatio="none"/>`);
   }
 
   return [
@@ -2561,7 +2794,7 @@ function buildSvgMarkup() {
   ].join('');
 }
 
-function buildLucidContentPayload() {
+async function buildLucidContentPayload() {
   const metrics = getLayoutMetrics();
 
   const { loadLucidSettings } = window.__lucidExport || {};
@@ -2572,6 +2805,7 @@ function buildLucidContentPayload() {
   const objects = [];
   const copiedItemIds = [];
   let zOrder = 20;
+  const fullResUrls = await getFullResDataUrls(state.grid.filter(Boolean));
 
   for (let i = 0; i < state.grid.length; i += 1) {
     const assetId = state.grid[i];
@@ -2585,6 +2819,7 @@ function buildLucidContentPayload() {
     const x = metrics.offsetX + col * (metrics.cellWidth + state.gapX);
     const y = metrics.offsetY + row * (metrics.cellHeight + state.gapY);
     const fitRect = objectFitRect({ x, y, width: metrics.cellWidth, height: metrics.cellHeight }, { width: asset.width, height: asset.height }, 'contain');
+    const url = fullResUrls.get(assetId) || asset.thumbUrl;
 
     const id = lucidId();
     copiedItemIds.push(id);
@@ -2614,7 +2849,7 @@ function buildLucidContentPayload() {
           DynamicFontSize: false,
           FillColor: {
             pos: 'fill',
-            url: asset.dataUrl,
+            url,
             polys: null
           },
           FlipX: false,
@@ -2624,7 +2859,7 @@ function buildLucidContentPayload() {
           ImageFillProps: {
             polys: [[{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }]],
             size: { width: asset.width, height: asset.height },
-            url: asset.dataUrl
+            url
           },
           InsetMargin: 0,
           LineColor: '#000000ff',
@@ -2682,7 +2917,7 @@ function buildLucidContentPayload() {
 }
 
 async function buildLucidHtmlPayload() {
-  const payload = buildLucidContentPayload();
+  const payload = await buildLucidContentPayload();
   const payloadJson = JSON.stringify(payload);
   const escapedPayload = escapeHtmlAttr(payloadJson);
   await renderPreview();
@@ -2703,7 +2938,7 @@ async function buildLucidHtmlPayload() {
 }
 
 async function canvasToPngBlob() {
-  await renderPreview();
+  await drawLayoutToCanvas(els.previewCanvas, { fullRes: true });
   return new Promise(resolve => {
     els.previewCanvas.toBlob(blob => resolve(blob), 'image/png');
   });
@@ -2731,7 +2966,7 @@ async function copyLucidchartAsset() {
     return;
   } catch {
     try {
-      const svgMarkup = buildSvgMarkup();
+      const svgMarkup = await buildSvgMarkup();
       const svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml' });
       await navigator.clipboard.write([
         new ClipboardItem({
@@ -2835,6 +3070,9 @@ function clearGrid() {
   state.multiSelectedSlots = [];
   resetCanvasLayout();
   state.grid = new Array(9).fill(null);
+  // Safe to prune right away: pushHistory() above already snapshotted the
+  // old assets, so anything still reachable via undo/redo is preserved.
+  void pruneOrphanedAssetBlobs();
   renderAll();
   fitCanvasView();
   showToast('Cleared and reset grid');
@@ -3223,7 +3461,12 @@ async function executeImportMode(files, mode, selectedIndex = state.selectedSlot
     const replaceSizing = options.replaceSizing || 'recommended';
     const customRows = Math.max(1, Number(options.customRows) || state.rows);
     const customCols = Math.max(1, Number(options.customCols) || state.cols);
+    const previousAssetIds = state.assets.map(asset => asset.id);
     state.assets = nextAssets;
+    // Nothing captures the pre-replace assets in undo history (this mode's
+    // only pushHistory() call happens further below, after the swap), so the
+    // old full-resolution blobs are already unreachable \u2014 safe to prune now.
+    void deleteAssetBlobs(previousAssetIds);
     state.holdingAssetIds = [];
     const sequence = nextIds.slice();
     const dims = resolveReplaceGridDimensions(sequence.length, requestedFirstRowOffset, replaceSizing, customRows, customCols);
@@ -4853,6 +5096,17 @@ function bindEvents() {
     const setLabel = (t) => { if (els.lucidSendConfirmBtn) els.lucidSendConfirmBtn.textContent = t; };
 
     try {
+      setLabel('Preparing images…');
+      // sendGridToLucid (js/lucid-export.js) expects each asset to carry its
+      // full-resolution `dataUrl` \u2014 pull those back out of IndexedDB just
+      // for the assets actually used in the grid, right before sending.
+      const usedAssetIds = [...new Set(state.grid.filter(Boolean))];
+      const fullResUrls = await getFullResDataUrls(usedAssetIds);
+      const assetsForExport = state.assets.map(asset => ({
+        ...asset,
+        dataUrl: fullResUrls.get(asset.id) || asset.thumbUrl
+      }));
+
       const result = await sendGridToLucid(
         {
           grid: state.grid,
@@ -4862,7 +5116,7 @@ function bindEvents() {
           cellHeight: state.cellHeight,
           gapX: state.gapX,
           gapY: state.gapY,
-          assets: state.assets
+          assets: assetsForExport
         },
         {
           apiKey: settings.apiKey,
@@ -5380,6 +5634,10 @@ async function init() {
   await renderAll();
   updateHistoryButtonStates();
   renderHistoryTimeline();
+  // Best-effort cleanup of any full-resolution blobs left behind by a
+  // previous session (e.g. tab closed mid-edit) that no longer correspond
+  // to any restored asset.
+  void pruneOrphanedAssetBlobs();
   requestAnimationFrame(() => {
     fitCanvasView();
     requestAnimationFrame(() => {
