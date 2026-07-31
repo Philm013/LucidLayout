@@ -867,6 +867,18 @@ function applyCanvasTransform() {
   updateZoomLabel();
 }
 
+// Resizes the grid container to the current zoom level without touching any
+// cell DOM nodes. Cell frames are positioned with percentages (see
+// createGridCell/createGridEdgeButtons), so they automatically rescale when
+// the container's pixel size changes — no need to tear down and recreate
+// every cell (and re-decode every image) just because the zoom level moved.
+function applyZoomSize() {
+  if (!els.grid) return;
+  const metrics = getLayoutMetrics();
+  els.grid.style.width = `${metrics.width * state.zoom}px`;
+  els.grid.style.height = `${metrics.height * state.zoom}px`;
+}
+
 function updateViewportLayout() {
   const targetWidth = 1660;
   const targetHeight = 940;
@@ -923,7 +935,10 @@ function zoomAt(clientX, clientY, zoomDelta) {
   state.zoom = nextZoom;
   state.panX = anchorX - worldX * nextZoom;
   state.panY = anchorY - worldY * nextZoom;
-  renderGrid();
+  // Zooming never changes which images are placed — just their on-screen
+  // scale — so only resize the grid container instead of rebuilding every
+  // cell (which would otherwise re-decode every image on each wheel tick).
+  applyZoomSize();
   applyCanvasTransform();
 }
 
@@ -2248,6 +2263,11 @@ function createGridCell(assetId, index, frame) {
       img.src = asset.dataUrl;
       img.alt = asset.name;
       img.draggable = false;
+      // Let the browser decode off the main thread and defer offscreen
+      // cells (large grids routinely have far more cells than are ever
+      // visible at once through the pan/zoom viewport).
+      img.decoding = 'async';
+      img.loading = 'lazy';
       img.style.objectFit = state.fit;
       img.style.objectPosition = 'center';
       cell.appendChild(img);
@@ -2435,8 +2455,7 @@ function renderGrid() {
   normalizeMultiSelection();
   const metrics = getLayoutMetrics();
 
-  els.grid.style.width = `${metrics.width * state.zoom}px`;
-  els.grid.style.height = `${metrics.height * state.zoom}px`;
+  applyZoomSize();
 
   for (let index = 0; index < state.grid.length; index += 1) {
     const row = Math.floor(index / state.cols);
@@ -3577,10 +3596,27 @@ function bindCanvasInteractions() {
     event.preventDefault();
   });
 
+  // Coalesce rapid wheel events (trackpads especially can fire many per
+  // frame) into a single zoom update per animation frame, instead of doing
+  // a full anchor-recalculation + style write for every individual tick.
+  let pendingWheelFactor = 1;
+  let pendingWheelX = 0;
+  let pendingWheelY = 0;
+  let wheelRafId = null;
   els.canvasViewport.addEventListener('wheel', event => {
     event.preventDefault();
     const factor = event.deltaY < 0 ? 1.08 : 0.92;
-    zoomAt(event.clientX, event.clientY, factor);
+    pendingWheelFactor *= factor;
+    pendingWheelX = event.clientX;
+    pendingWheelY = event.clientY;
+    if (wheelRafId == null) {
+      wheelRafId = requestAnimationFrame(() => {
+        wheelRafId = null;
+        const combinedFactor = pendingWheelFactor;
+        pendingWheelFactor = 1;
+        zoomAt(pendingWheelX, pendingWheelY, combinedFactor);
+      });
+    }
   }, { passive: false });
 
   els.canvasViewport.addEventListener('mousedown', event => {
