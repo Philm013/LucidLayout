@@ -185,6 +185,8 @@ function resolveCompressionSettings({
 // below the hard limit for zip/container overhead.
 const LUCID_IMAGES_BUDGET_BYTES = 48 * 1024 * 1024;
 const LUCID_MOST_AGGRESSIVE_LEVEL = 'small';
+const LUCID_SINGLE_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const LUCID_SINGLE_IMAGE_MAX_DIMENSION = 4000;
 
 function loadImageFromDataUrl(dataUrl) {
   // createImageBitmap decodes off the main thread in supporting browsers
@@ -323,6 +325,52 @@ async function compressAssetForExport(dataUrl, settings) {
   }
 }
 
+async function scaleAssetDataUrlForExport(dataUrl, imagePixelScale = 100) {
+  const scalePct = clampNumber(imagePixelScale, 25, 200, 100);
+  if (!dataUrl || typeof dataUrl !== 'string') return dataUrl;
+
+  const source = dataUrlToUint8Array(dataUrl);
+  if (source.mime === 'image/svg+xml' || source.mime === 'image/gif') {
+    return dataUrl;
+  }
+
+  try {
+    const img = await loadImageFromDataUrl(dataUrl);
+    const baseW = Math.max(1, img.width || 1);
+    const baseH = Math.max(1, img.height || 1);
+    const requestedW = Math.max(1, Math.round(baseW * (scalePct / 100)));
+    const requestedH = Math.max(1, Math.round(baseH * (scalePct / 100)));
+    const lucidCapScale = Math.min(1, LUCID_SINGLE_IMAGE_MAX_DIMENSION / Math.max(requestedW, requestedH));
+    const targetW = Math.max(1, Math.round(requestedW * lucidCapScale));
+    const targetH = Math.max(1, Math.round(requestedH * lucidCapScale));
+
+    // Avoid lossy re-encoding when the requested output already matches source.
+    if (targetW === baseW && targetH === baseH) {
+      if (typeof img.close === 'function') img.close();
+      return dataUrl;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext('2d');
+    if (source.mime === 'image/jpeg') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, targetW, targetH);
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+      if (typeof img.close === 'function') img.close();
+      return canvas.toDataURL('image/jpeg', 0.92);
+    }
+    ctx.clearRect(0, 0, targetW, targetH);
+    ctx.drawImage(img, 0, 0, targetW, targetH);
+    if (typeof img.close === 'function') img.close();
+    return canvas.toDataURL('image/png');
+  } catch (err) {
+    console.warn('[lucid-export] image pixel scaling failed, using original asset', err);
+    return dataUrl;
+  }
+}
+
 // ── object-fit: contain rect (mirrors app.js objectFitRect) ──────────────────
 
 function containRect(container, src) {
@@ -341,60 +389,356 @@ function containRect(container, src) {
 
 // ── Standard Import document.json builder ────────────────────────────────────
 
-function buildDocumentJson(gridState, imageFilenames, imageScale = 1) {
-  const { grid, rows, cols, cellWidth, cellHeight, gapX, gapY, assets } = gridState;
+function getGapAfterColumn(gridState, col) {
+  const { cols, gapX, columnGaps } = gridState;
+  if (col < 0 || col >= Math.max(0, cols - 1)) return 0;
+  const gap = Array.isArray(columnGaps) ? Number(columnGaps[col]) : NaN;
+  return Number.isFinite(gap) ? gap : gapX;
+}
 
-  const findAsset = (id) => assets.find(a => a.id === id);
+function getColumnOffsets(gridState) {
+  const { cols, cellWidth } = gridState;
+  const offsets = [];
+  let x = 0;
+  for (let col = 0; col < cols; col += 1) {
+    offsets.push(x);
+    x += cellWidth + getGapAfterColumn(gridState, col);
+  }
+  return offsets;
+}
 
-  const shapes = [];
+function getPageLabelForAsset(asset, fallback) {
+  const name = String(asset?.name || '');
+  let page = null;
+  const explicit = name.match(/page[^0-9]*(\d{1,6})/i);
+  if (explicit) {
+    page = Number(explicit[1]);
+  } else {
+    const trailing = name.match(/(\d{1,6})(?!.*\d)/);
+    if (trailing) page = Number(trailing[1]);
+  }
+  if (!Number.isFinite(page) || page < 1) {
+    page = Math.max(1, Number(fallback) || 1);
+  }
+  return `Page ${page}`;
+}
 
-  for (let i = 0; i < grid.length; i++) {
-    const assetId = grid[i];
-    if (!assetId) continue;
+function getSpreadEndCol(gridState, row, startCol) {
+  let end = startCol;
+  for (let col = startCol; col < gridState.cols - 1; col += 1) {
+    const leftIndex = row * gridState.cols + col;
+    const rightIndex = row * gridState.cols + (col + 1);
+    if (getGapAfterColumn(gridState, col) !== 0) break;
+    if (!gridState.grid[leftIndex] || !gridState.grid[rightIndex]) break;
+    end = col + 1;
+  }
+  return end;
+}
 
-    const asset = findAsset(assetId);
+function getItemRenderScale(item) {
+  const PREPARED_EXPORT_MAX_DIM = 7000;
+  let scale = 1;
+  for (const slot of item.slots) {
+    const asset = slot.asset;
     if (!asset) continue;
+    const sx = (asset.width || slot.width) / Math.max(1, slot.width);
+    const sy = (asset.height || item.height) / Math.max(1, item.height);
+    scale = Math.max(scale, sx, sy);
+  }
+  const maxBase = Math.max(item.width, item.height);
+  const maxSafe = Math.max(1, PREPARED_EXPORT_MAX_DIM / Math.max(1, maxBase));
+  return clampNumber(scale, 1, maxSafe, 1);
+}
 
-    const filename = imageFilenames[assetId];
-    if (!filename) continue;
-
-    const row = Math.floor(i / cols);
-    const col = i % cols;
-
-    const cellX = col * (cellWidth + gapX);
-    const cellY = row * (cellHeight + gapY);
-
-    const fit = containRect(
-      { x: cellX, y: cellY, width: cellWidth, height: cellHeight },
-      { width: asset.width || cellWidth, height: asset.height || cellHeight }
-    );
-
-    // Per https://developer.lucid.co/docs/standard-library-si the "Image Block"
-    // shape (type: "image") is the correct choice for pure images — it has NO
-    // default text/rounded-corner styling (unlike type:"rectangle", which is
-    // actually the "Default Block" — a rounded box with placeholder text).
-    // Image Block requires top-level "image" and "stroke" (not nested in "style").
-    shapes.push({
-      id: `img-${i}`,
-      type: 'image',
-      boundingBox: {
-        x: Math.round(fit.x * imageScale),
-        y: Math.round(fit.y * imageScale),
-        w: Math.round(fit.width * imageScale),
-        h: Math.round(fit.height * imageScale)
-      },
-      image: {
-        type: 'ref',
-        ref: filename
-      },
-      stroke: { width: 0 }
-    });
-
+async function buildPreparedItemDataUrl(item) {
+  const images = [];
+  for (const slot of item.slots) {
+    if (!slot.asset?.dataUrl) continue;
+    const image = await loadImageFromDataUrl(slot.asset.dataUrl);
+    images.push({ slot, image });
+  }
+  if (images.length === 0) {
+    return {
+      dataUrl: null,
+      width: Math.max(1, Math.round(item.width)),
+      height: Math.max(1, Math.round(item.height))
+    };
   }
 
-  // Page size (px). Lucid caps custom pages at 20,000 × 20,000.
-  const pageW = Math.min(20000, Math.max(1, Math.round((cols * cellWidth + Math.max(0, cols - 1) * gapX) * imageScale)));
-  const pageH = Math.min(20000, Math.max(1, Math.round((rows * cellHeight + Math.max(0, rows - 1) * gapY) * imageScale)));
+  const targetHeight = Math.max(1, ...images.map(({ image }) => image.height || 1));
+  const widths = images.map(({ image }) => {
+    const sourceW = image.width || 1;
+    const sourceH = image.height || 1;
+    return Math.max(1, Math.round(sourceW * (targetHeight / sourceH)));
+  });
+  const width = widths.reduce((sum, w) => sum + w, 0);
+  const height = targetHeight;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, width, height);
+
+  let drawX = 0;
+  for (let i = 0; i < images.length; i += 1) {
+    const { image } = images[i];
+    const drawW = widths[i];
+    ctx.drawImage(image, drawX, 0, drawW, height);
+    drawX += drawW;
+    if (typeof image.close === 'function') image.close();
+  }
+
+  return {
+    dataUrl: canvas.toDataURL('image/png'),
+    width,
+    height
+  };
+}
+
+function computeGridPageSize(gridState) {
+  const { rows, cols, cellWidth, cellHeight, gapY } = gridState;
+  const totalGapWidth = Array.from({ length: Math.max(0, cols - 1) })
+    .reduce((sum, _, idx) => sum + getGapAfterColumn(gridState, idx), 0);
+  return {
+    pageW: Math.max(1, cols * cellWidth + totalGapWidth),
+    pageH: Math.max(1, rows * cellHeight + Math.max(0, rows - 1) * gapY)
+  };
+}
+
+async function buildExportItems(gridState, {
+  mergeLinkedSpreads = true,
+  includeOutline = true,
+  includePageLabels = false
+} = {}) {
+  const { rows, cols, cellWidth, cellHeight, gapY, grid, assets } = gridState;
+  const columnOffsets = getColumnOffsets(gridState);
+  const byId = new Map(assets.map(asset => [asset.id, asset]));
+  const items = [];
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols;) {
+      const slotIndex = row * cols + col;
+      const assetId = grid[slotIndex];
+      if (!assetId) {
+        col += 1;
+        continue;
+      }
+
+      const endCol = mergeLinkedSpreads ? getSpreadEndCol(gridState, row, col) : col;
+      const slots = [];
+      for (let c = col; c <= endCol; c += 1) {
+        const i = row * cols + c;
+        const id = grid[i];
+        if (!id) break;
+        const asset = byId.get(id);
+        if (!asset) continue;
+        slots.push({
+          slotIndex: i,
+          asset,
+          left: columnOffsets[c],
+          width: cellWidth,
+          label: getPageLabelForAsset(asset, i + 1)
+        });
+      }
+      if (slots.length === 0) {
+        col += 1;
+        continue;
+      }
+
+      const startCol = slots[0].slotIndex % cols;
+      const finalCol = slots[slots.length - 1].slotIndex % cols;
+      const x = columnOffsets[startCol];
+      const y = row * (cellHeight + gapY);
+      const w = (columnOffsets[finalCol] + cellWidth) - x;
+      const h = cellHeight;
+
+      const item = {
+        id: `item-r${row}-c${startCol}-c${finalCol}`,
+        row,
+        startCol,
+        endCol: finalCol,
+        x,
+        y,
+        width: w,
+        height: h,
+        slots,
+        isSpread: slots.length > 1,
+        dataUrl: null,
+        sourceWidth: null,
+        sourceHeight: null,
+        includeOutline,
+        includePageLabels
+      };
+      if (item.isSpread) {
+        const rendered = await buildPreparedItemDataUrl(item);
+        item.dataUrl = rendered.dataUrl;
+        item.sourceWidth = rendered.width;
+        item.sourceHeight = rendered.height;
+      } else {
+        const only = slots[0];
+        item.dataUrl = only.asset?.dataUrl || null;
+        item.sourceWidth = only.asset?.width || cellWidth;
+        item.sourceHeight = only.asset?.height || cellHeight;
+      }
+      items.push(item);
+      col = finalCol + 1;
+    }
+  }
+
+  return items;
+}
+
+function buildDocumentJsonFromItems(exportItems, imageFilenames, pageSize, imageScale = 1, {
+  includeOutline = true,
+  includePageLabels = false,
+  labelTextSize = 14
+} = {}) {
+  const { pageW, pageH } = pageSize;
+  const safeLabelTextSize = clampNumber(labelTextSize, 8, 72, 14);
+  const labelHeight = Math.max(28, Math.round(safeLabelTextSize * 2.8));
+  const labelGap = 0;
+  const shapes = [];
+  let maxBottom = 0;
+
+  // Keep row/column rhythm anchored to grid cells. If page labels are enabled,
+  // reserve deterministic extra vertical space between rows when the label box
+  // would otherwise exceed the configured row gap.
+  // `item.y` already includes row*(cellHeight + gapY), so infer the row gap
+  // contribution from neighboring rows by using each item's row index directly.
+  const labelClearance = includePageLabels ? (labelHeight + labelGap + 6) : 0;
+
+  function textStyleForAlignment(align) {
+    return {
+      // Keep multiple alignment keys for Standard Import compatibility.
+      align,
+      hAlign: align,
+      textAlign: align,
+      valign: 'middle',
+      vAlign: 'middle',
+      color: '#000000',
+      size: safeLabelTextSize,
+      fontSize: safeLabelTextSize,
+      dynamicFontSize: false
+    };
+  }
+
+  function rowOffset(rowIndex, itemGapY) {
+    const gapYScaled = Math.max(0, Math.round(itemGapY * imageScale));
+    const perRowExtra = Math.max(0, labelClearance - gapYScaled);
+    return Math.max(0, rowIndex) * perRowExtra;
+  }
+
+  for (let index = 0; index < exportItems.length; index += 1) {
+    const item = exportItems[index];
+    const sourceW = Math.max(1, item.sourceWidth || item.width);
+    const sourceH = Math.max(1, item.sourceHeight || item.height);
+    const cellX = Math.round(item.x * imageScale);
+    const cellYBase = Math.round(item.y * imageScale);
+    const cellW = Math.max(1, Math.round(item.width * imageScale));
+    const cellH = Math.max(1, Math.round(item.height * imageScale));
+
+    const rowGapY = item.row > 0
+      ? Math.max(0, (item.y / item.row) - item.height)
+      : 0;
+    const rowY = cellYBase + rowOffset(item.row, rowGapY);
+
+    const fit = containRect(
+      { x: cellX, y: rowY, width: cellW, height: cellH },
+      { width: sourceW, height: sourceH }
+    );
+    const x = Math.round(fit.x);
+    const y = Math.round(fit.y);
+    const w = Math.max(1, Math.round(fit.width));
+    const h = Math.max(1, Math.round(fit.height));
+
+    shapes.push({
+      id: `img-${index}`,
+      type: 'image',
+      boundingBox: { x, y, w, h },
+      image: {
+        type: 'ref',
+        ref: imageFilenames[item.id]
+      },
+      stroke: includeOutline
+        ? { width: 1, color: '#000000' }
+        : { width: 0 }
+    });
+
+    const bottom = rowY + cellH + (includePageLabels ? labelClearance : 0);
+    if (bottom > maxBottom) maxBottom = bottom;
+  }
+
+  if (includePageLabels) {
+    for (let index = 0; index < exportItems.length; index += 1) {
+      const item = exportItems[index];
+      const cellX = Math.round(item.x * imageScale);
+      const cellYBase = Math.round(item.y * imageScale);
+      const cellW = Math.max(1, Math.round(item.width * imageScale));
+      const cellH = Math.max(1, Math.round(item.height * imageScale));
+      const rowGapY = item.row > 0
+        ? Math.max(0, (item.y / item.row) - item.height)
+        : 0;
+      const rowY = cellYBase + rowOffset(item.row, rowGapY);
+      const sourceW = Math.max(1, item.sourceWidth || item.width);
+      const sourceH = Math.max(1, item.sourceHeight || item.height);
+      const fit = containRect(
+        { x: cellX, y: rowY, width: cellW, height: cellH },
+        { width: sourceW, height: sourceH }
+      );
+      const fitX = Math.round(fit.x);
+      const fitY = Math.round(fit.y);
+      const fitW = Math.max(1, Math.round(fit.width));
+      const fitH = Math.max(1, Math.round(fit.height));
+
+      const y = fitY + fitH + labelGap;
+      const h = labelHeight;
+      const x = fitX;
+      const w = fitW;
+
+      if (item.slots.length === 1) {
+        shapes.push({
+          id: `lbl-${index}-0`,
+          type: 'text',
+          text: item.slots[0].label,
+          boundingBox: { x, y, w, h },
+          style: {
+            text: textStyleForAlignment('center'),
+            fill: { color: '#ffffff00' },
+            line: { width: 0, color: '#00000000' }
+          }
+        });
+      } else {
+        const first = item.slots[0];
+        const last = item.slots[item.slots.length - 1];
+        // Anchor labels directly under the spread's left and right edges.
+        const edgeWidth = Math.max(1, Math.round(Math.min(w * 0.18, 160)));
+        const rightX = x + w - edgeWidth;
+        shapes.push({
+          id: `lbl-${index}-L`,
+          type: 'text',
+          text: first.label,
+          boundingBox: { x, y, w: edgeWidth, h },
+          style: {
+            text: textStyleForAlignment('left'),
+            fill: { color: '#ffffff00' },
+            line: { width: 0, color: '#00000000' }
+          }
+        });
+        shapes.push({
+          id: `lbl-${index}-R`,
+          type: 'text',
+          text: last.label,
+          boundingBox: { x: rightX, y, w: edgeWidth, h },
+          style: {
+            text: textStyleForAlignment('right'),
+            fill: { color: '#ffffff00' },
+            line: { width: 0, color: '#00000000' }
+          }
+        });
+      }
+    }
+  }
 
   return {
     version: 1,
@@ -405,8 +749,8 @@ function buildDocumentJson(gridState, imageFilenames, imageScale = 1) {
         settings: {
           size: {
             type: 'custom',
-            w: pageW,
-            h: pageH
+            w: Math.min(20000, Math.max(1, Math.round(pageW * imageScale))),
+            h: Math.min(20000, Math.max(1, Math.round(pageH * imageScale), maxBottom))
           }
         },
         shapes
@@ -488,7 +832,7 @@ export async function getLucidDoc(apiKey, documentId) {
  * Builds a .lucid ZIP in the browser and sends it to the proxy server.
  *
  * @param {object} gridState  — { grid, rows, cols, cellWidth, cellHeight, gapX, gapY, assets }
- * @param {object} options    — { apiKey, title, product, parentFolderId, imageScale, compressImages, compressionLevel, compressionFormat, customQuality, customMaxDimension }
+ * @param {object} options    — { apiKey, title, product, parentFolderId, imageScale, imagePixelScale, labelTextSize, compressImages, compressionLevel, compressionFormat, customQuality, customMaxDimension }
  * @param {function} onProgress — (message: string) => void
  * @returns {Promise<{editUrl, viewUrl, documentId, title}>}
  */
@@ -499,9 +843,14 @@ export async function sendGridToLucid(gridState, options, onProgress = () => {})
     product = 'lucidchart',
     parentFolderId,
     imageScale = 1,
+    imagePixelScale = 100,
+    labelTextSize = 14,
     compressImages = true,
     compressionLevel = DEFAULT_COMPRESSION_LEVEL,
     compressionFormat = DEFAULT_COMPRESSION_FORMAT,
+    mergeLinkedSpreads = true,
+    includeOutline = true,
+    includePageLabels = false,
     customQuality,
     customMaxDimension
   } = options;
@@ -519,16 +868,24 @@ export async function sendGridToLucid(gridState, options, onProgress = () => {})
   const zip = new JSZip();
   const imageFilenames = {};
 
-  // Add each unique asset used in the grid
-  const usedAssetIds = [...new Set(gridState.grid.filter(Boolean))];
+  onProgress('Preparing pages…');
+  const exportItems = await buildExportItems(gridState, {
+    mergeLinkedSpreads,
+    includeOutline,
+    includePageLabels
+  });
+  const pageSize = computeGridPageSize(gridState);
+  if (exportItems.length === 0) {
+    throw new Error('No placed images to send to Lucid.');
+  }
 
   // Compress every asset first (without writing to the zip yet) so we can
   // check the total size against Lucid's 50MB /images budget. The per-image
   // target size is capped up front to an even share of that budget, so large
   // grids (many images) usually fit on this single pass instead of always
   // needing a full second pass over every image at the most aggressive preset.
-  const perImageBudgetBytes = compressImages && usedAssetIds.length > 0
-    ? LUCID_IMAGES_BUDGET_BYTES / usedAssetIds.length
+  const perImageBudgetBytes = compressImages && exportItems.length > 0
+    ? LUCID_IMAGES_BUDGET_BYTES / exportItems.length
     : Infinity;
 
   async function compressAllAssets(level, maxTargetBytes) {
@@ -536,20 +893,30 @@ export async function sendGridToLucid(gridState, options, onProgress = () => {})
     const prepared = [];
     let totalBytes = 0;
     let completed = 0;
-    const total = usedAssetIds.length;
+    const total = exportItems.length;
 
-    async function processOne(assetId) {
-      const asset = gridState.assets.find(a => a.id === assetId);
-      if (!asset || !asset.dataUrl) return;
+    async function processOne(item) {
+      if (!item?.dataUrl) return;
+
+      const scaledDataUrl = await scaleAssetDataUrlForExport(item.dataUrl, imagePixelScale);
 
       const { bytes, mime } = compressImages
-        ? await compressAssetForExport(asset.dataUrl, settings)
-        : dataUrlToUint8Array(asset.dataUrl);
+        ? await compressAssetForExport(scaledDataUrl, settings)
+        : dataUrlToUint8Array(scaledDataUrl);
+
+      if (bytes.byteLength > LUCID_SINGLE_IMAGE_MAX_BYTES) {
+        const name = (item?.slots?.[0]?.asset?.name || item?.id || 'image').replace(/\.[^.]+$/, '');
+        const mb = (bytes.byteLength / (1024 * 1024)).toFixed(2);
+        throw new Error(
+          `Image "${name}" is ${mb}MB after export processing, above Lucid's 10MB per-image limit. `
+          + `Reduce image pixel dimensions, enable compression, or split this export into smaller groups.`
+        );
+      }
 
       completed += 1;
       onProgress(`Preparing image ${completed} of ${total}…`);
       totalBytes += bytes.byteLength;
-      prepared.push({ assetId, asset, bytes, mime });
+      prepared.push({ item, bytes, mime });
     }
 
     // Process several images at once instead of fully awaiting each one in
@@ -560,9 +927,9 @@ export async function sendGridToLucid(gridState, options, onProgress = () => {})
     const concurrency = Math.min(6, Math.max(2, (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 4));
     let nextIndex = 0;
     async function worker() {
-      while (nextIndex < usedAssetIds.length) {
-        const assetId = usedAssetIds[nextIndex++];
-        await processOne(assetId);
+      while (nextIndex < exportItems.length) {
+        const item = exportItems[nextIndex++];
+        await processOne(item);
       }
     }
     await Promise.all(Array.from({ length: Math.min(concurrency, total) }, worker));
@@ -585,11 +952,12 @@ export async function sendGridToLucid(gridState, options, onProgress = () => {})
   }
 
   const usedFilenames = new Set();
-  for (const { assetId, asset, bytes, mime } of prepared) {
+  for (const { item, bytes, mime } of prepared) {
     const ext = extensionForMime(mime);
     // Strip any existing extension from the asset name before appending the correct one
-    const rawName = (asset.name || assetId).replace(/\.[^.]+$/, '');
-    const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || `img-${assetId}`;
+    const firstAssetName = item?.slots?.[0]?.asset?.name || item?.id;
+    const rawName = (firstAssetName || item.id).replace(/\.[^.]+$/, '');
+    const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80) || `img-${item.id}`;
     const filename = `${safeName}.${ext}`;
 
     // Deduplicate: if the filename already exists, append the asset index
@@ -604,12 +972,16 @@ export async function sendGridToLucid(gridState, options, onProgress = () => {})
     // No explicit folder() call, and createFolders:false avoids an empty
     // "images/" directory entry in the ZIP (some parsers reject those).
     zip.file(`images/${finalFilename}`, bytes, { binary: true, createFolders: false });
-    imageFilenames[assetId] = finalFilename;
+    imageFilenames[item.id] = finalFilename;
   }
 
   onProgress('Building document layout…');
 
-  const docJson = buildDocumentJson(gridState, imageFilenames, imageScale);
+  const docJson = buildDocumentJsonFromItems(exportItems, imageFilenames, pageSize, imageScale, {
+    includeOutline,
+    includePageLabels,
+    labelTextSize
+  });
   console.log('[lucid-export] document.json:', JSON.stringify(docJson, null, 2));
   zip.file('document.json', JSON.stringify(docJson, null, 2));
 
