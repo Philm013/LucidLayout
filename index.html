@@ -83,39 +83,48 @@
               <h2>Editable grid</h2>
             </div>
             <div class="canvas-controls" aria-label="Canvas controls">
-              <button id="zoomOutBtn" class="mini-button" type="button" title="Zoom out" aria-label="Zoom out">-</button>
-              <span id="zoomLabel" class="zoom-label">100%</span>
-              <button id="zoomInBtn" class="mini-button" type="button" title="Zoom in" aria-label="Zoom in">+</button>
-              <button id="resetViewBtn" class="button" type="button">Reset view</button>
-              <button id="fitViewBtn" class="button" type="button">Fit canvas</button>
-              <div class="menu-wrap">
-                <button id="importMenuBtn" class="button button-primary" type="button" aria-haspopup="true" aria-expanded="false">Import ▾</button>
-                <div id="importMenu" class="menu-pop menu-pop-right" hidden>
+              <div class="canvas-controls-primary">
+                <div class="menu-wrap">
+                  <button id="importMenuBtn" class="button button-primary" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="importMenu">Import ▾</button>
+                  <div id="importMenu" class="menu-pop menu-pop-right" role="group" aria-label="Import options" hidden>
                     <button id="importFolderBtn" class="menu-item" type="button">Load folder</button>
                     <button id="importFilesBtn" class="menu-item" type="button">Add files</button>
                     <hr class="menu-divider">
                     <button id="importDocBtn" class="menu-item" type="button">From document…</button>
-                </div>
-                <button id="exportMenuBtn" class="button button-primary" type="button" aria-haspopup="true" aria-expanded="false">Export ▾</button>
-                <div id="exportMenu" class="menu-pop menu-pop-right" hidden>
-                  <button id="copyLucidBtn" class="menu-item" type="button">Copy for Lucidchart</button>
-                  <button id="sendToLucidBtn" class="menu-item" type="button">Send to Lucid ↑</button>
-                  <hr class="menu-divider">
-                  <button id="copyPngBtn" class="menu-item" type="button">Copy preview PNG</button>
-                  <button id="downloadPngBtn" class="menu-item" type="button">Download PNG preview</button>
+                  </div>
+                  <button id="exportMenuBtn" class="button button-primary" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="exportMenu">Export ▾</button>
+                  <div id="exportMenu" class="menu-pop menu-pop-right" role="group" aria-label="Export options" hidden>
+                    <button id="copyLucidBtn" class="menu-item" type="button">Copy for Lucidchart</button>
+                    <button id="sendToLucidBtn" class="menu-item" type="button">Send to Lucid ↑</button>
+                    <hr class="menu-divider">
+                    <button id="copyPngBtn" class="menu-item" type="button">Copy preview PNG</button>
+                    <button id="downloadPngBtn" class="menu-item" type="button">Download PNG preview</button>
+                  </div>
                 </div>
               </div>
-              <button id="undoBtn" class="button" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">↶ Undo</button>
-              <button id="redoBtn" class="button" type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷ Redo</button>
-              <button id="historyBtn" class="button" type="button" title="View history" aria-label="View history" aria-haspopup="dialog">⏱ History</button>
-              <button id="exportLogBtn" class="button" type="button" title="View export log" aria-label="View export log" aria-haspopup="dialog">📤 Exports</button>
-              <button id="lucidSettingsBtn" class="button" type="button" title="Settings" aria-label="Settings" aria-haspopup="dialog">⚙ Settings</button>
+              <div class="canvas-controls-secondary">
+                <button id="undoBtn" class="button canvas-action-btn" type="button" title="Undo (Ctrl+Z)" aria-label="Undo"><span class="btn-icon" aria-hidden="true">↶</span><span class="btn-label">Undo</span></button>
+                <button id="redoBtn" class="button canvas-action-btn" type="button" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"><span class="btn-icon" aria-hidden="true">↷</span><span class="btn-label">Redo</span></button>
+                <button id="historyBtn" class="button canvas-action-btn" type="button" title="View history" aria-label="View history" aria-haspopup="dialog"><span class="btn-icon" aria-hidden="true">⏱</span><span class="btn-label">History</span></button>
+                <button id="exportLogBtn" class="button canvas-action-btn" type="button" title="View export log" aria-label="View export log" aria-haspopup="dialog"><span class="btn-icon" aria-hidden="true">📤</span><span class="btn-label">Exports</span></button>
+                <button id="helpBtn" class="button canvas-action-btn" type="button" title="Help" aria-label="Help" aria-haspopup="dialog"><span class="btn-icon" aria-hidden="true">?</span><span class="btn-label">Help</span></button>
+                <button id="lucidSettingsBtn" class="button canvas-action-btn" type="button" title="Settings" aria-label="Settings" aria-haspopup="dialog"><span class="btn-icon" aria-hidden="true">⚙</span><span class="btn-label">Settings</span></button>
+              </div>
             </div>
           </div>
           <p class="hint canvas-hint">Scroll to zoom. Drag empty canvas space to pan. Cell actions appear on hover.</p>
           <div id="canvasViewport" class="canvas-viewport" aria-label="Grid canvas viewport" aria-describedby="dragExpandStatus">
             <div id="canvasStage" class="canvas-stage">
               <div id="grid" class="grid" aria-label="Editable image grid"></div>
+            </div>
+            <div class="canvas-zoom-dock" aria-label="Canvas zoom and view controls">
+              <div class="canvas-zoom-cluster">
+                <button id="zoomOutBtn" class="mini-button" type="button" title="Zoom out" aria-label="Zoom out">-</button>
+                <span id="zoomLabel" class="zoom-label">100%</span>
+                <button id="zoomInBtn" class="mini-button" type="button" title="Zoom in" aria-label="Zoom in">+</button>
+              </div>
+              <button id="resetViewBtn" class="button icon-button canvas-view-btn" type="button" title="Reset view" aria-label="Reset view">↺</button>
+              <button id="fitViewBtn" class="button icon-button canvas-view-btn" type="button" title="Fit canvas" aria-label="Fit canvas">⤢</button>
             </div>
           </div>
           <button id="toggleTrayBtn" class="tray-handle-btn" type="button" title="Toggle image tray" aria-expanded="false" aria-controls="imageTrayPanel" aria-label="Toggle image tray">
@@ -375,6 +384,65 @@
     </div>
   </div>
 
+  <div id="helpModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card help-modal-card" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle">
+      <div class="modal-header">
+        <div>
+          <h3 id="helpModalTitle">Help and Shortcuts</h3>
+          <p class="hint">Overview of core features, export options, and keyboard access.</p>
+        </div>
+      </div>
+      <div class="help-content">
+        <section class="help-section">
+          <h4>Core workflow</h4>
+          <ul class="help-list">
+            <li>Use <strong>Import</strong> to add image files, folders, or document pages.</li>
+            <li>Edit the grid with rows, columns, gaps, and cell size controls in the sidebar.</li>
+            <li>Use <strong>Auto pack</strong>, <strong>Shuffle</strong>, and <strong>Clear and Reset Grid</strong> for layout management.</li>
+            <li>Use <strong>Export</strong> to copy Lucid payloads, copy a PNG preview, or download a PNG preview.</li>
+            <li>Use <strong>Send to Lucid</strong> after adding an API key in <strong>Settings</strong>.</li>
+          </ul>
+        </section>
+        <section class="help-section">
+          <h4>Grid and tray actions</h4>
+          <ul class="help-list">
+            <li>Click a grid slot to select it. Use inline cell actions to preview, move, replace, clear, or paste.</li>
+            <li>When a row or column is trimmed, removed images are staged in the <strong>Image Tray</strong>.</li>
+            <li>Use the tray to place staged images back into the grid or permanently remove them.</li>
+            <li>Use <strong>History</strong> to jump to earlier checkpoints and <strong>Exports</strong> to revisit Lucid links.</li>
+          </ul>
+        </section>
+        <section class="help-section">
+          <h4>Keyboard shortcuts</h4>
+          <ul class="help-list help-shortcuts">
+            <li><kbd>Tab</kbd> and <kbd>Shift</kbd> + <kbd>Tab</kbd>: move between controls.</li>
+            <li><kbd>Enter</kbd> or <kbd>Space</kbd> on a grid slot: select the slot.</li>
+            <li><kbd>Arrow keys</kbd> on a focused grid slot: move focus between slots.</li>
+            <li><kbd>M</kbd> on a filled slot: press M to move that image with the keyboard.</li>
+            <li><kbd>Enter</kbd> while move mode is active: place the selected or staged image into the focused slot.</li>
+            <li><kbd>Escape</kbd> during move mode: cancel keyboard placement.</li>
+            <li><kbd>P</kbd> or <kbd>V</kbd> on a filled slot: open image preview.</li>
+            <li><kbd>Escape</kbd> in any dialog: close the dialog.</li>
+            <li><kbd>Arrow Left</kbd> and <kbd>Arrow Right</kbd> in image preview: move between preview items.</li>
+            <li><kbd>Ctrl</kbd> + <kbd>Z</kbd>: undo. <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Z</kbd> or <kbd>Ctrl</kbd> + <kbd>Y</kbd>: redo.</li>
+            <li><kbd>Paste</kbd> with a grid slot selected: paste an image from the clipboard into that slot.</li>
+          </ul>
+        </section>
+        <section class="help-section">
+          <h4>Accessibility notes</h4>
+          <ul class="help-list">
+            <li>Dialogs trap keyboard focus until closed and return focus to the button that opened them.</li>
+            <li>The app supports reduced-motion preferences and strong visible focus outlines.</li>
+            <li>Document page thumbnails expose selected state, and history checkpoints are keyboard-operable buttons.</li>
+          </ul>
+        </section>
+      </div>
+      <div class="modal-actions">
+        <button id="helpCloseBtn" class="button button-primary" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Send to Lucid modal -->
   <div id="lucidSendModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="lucidSendTitle" style="max-width:520px">
@@ -415,12 +483,14 @@
     <div class="modal-card settings-modal-card" role="dialog" aria-modal="true" aria-labelledby="lucidSettingsTitle">
       <h3 id="lucidSettingsTitle">Settings</h3>
 
+      <div class="settings-modal-content">
+
       <section class="settings-section">
         <h4 class="modal-section-heading">Interface</h4>
         <div class="field-grid settings-grid">
           <label>
             <span>Interface size (%)</span>
-            <input id="uiScaleInput" type="number" min="75" max="150" step="5" value="100" inputmode="numeric">
+            <input id="uiScaleInput" type="number" min="75" max="150" step="5" value="110" inputmode="numeric">
           </label>
         </div>
         <p class="hint">Scales the whole app's text, buttons, and panels larger or smaller. Applied immediately and remembered on this device.</p>
@@ -507,6 +577,8 @@
         </div>
         <p class="hint">Need an API key? Go to <a href="https://lucid.app/developer" target="_blank" rel="noopener">lucid.app/developer</a>, create an app, and generate an API key with the <strong>DocumentEdit</strong> grant.</p>
       </section>
+
+      </div>
 
       <div class="modal-actions">
         <button id="lucidSettingsCancelBtn" class="button" type="button">Cancel</button>

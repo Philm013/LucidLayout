@@ -39,17 +39,18 @@ function saveShrinkMode(mode) {
 const UI_SCALE_STORAGE_KEY = 'png-grid-ui-scale';
 const UI_SCALE_MIN = 0.75;
 const UI_SCALE_MAX = 1.5;
+const UI_SCALE_DEFAULT = 1.1;
 
 function loadUiScalePreference() {
   try {
     const raw = localStorage.getItem(UI_SCALE_STORAGE_KEY);
-    if (raw === null) return 1;
+    if (raw === null) return UI_SCALE_DEFAULT;
     const stored = Number(raw);
     if (Number.isFinite(stored)) return clamp(stored, UI_SCALE_MIN, UI_SCALE_MAX);
   } catch {
     // localStorage can be unavailable in some privacy contexts; ignore.
   }
-  return 1;
+  return UI_SCALE_DEFAULT;
 }
 
 function saveUiScalePreference(scale) {
@@ -113,7 +114,7 @@ const state = {
   textSize: 12,
   fit: 'contain',
   shrinkMode: 'trim',
-  uiScalePreference: 1,
+  uiScalePreference: UI_SCALE_DEFAULT,
   canvasWidth: 1280,
   canvasHeight: 720,
   contentOffsetX: 0,
@@ -137,15 +138,17 @@ const state = {
   overflowModalOpen: false,
   previewModalOpen: false,
   previewSlotIndex: null,
+  keyboardPlacement: null,
   dragEdgeHint: null,
   flowPreview: null,
   autoExpandSession: null,
   multiSelectedSlots: [],
   holdingAssetIds: [],
-  modalFocusReturnEl: null
+  modalFocusStack: []
 };
 
 const els = {};
+let modalOpenSequence = 0;
 
 // History system for undo/redo
 const HISTORY_MAX_SIZE = 50;
@@ -305,6 +308,7 @@ function updateHistoryButtonStates() {
 }
 const imageCache = new Map();
 let toastTimer = null;
+let transparentDragImage = null;
 
 const ratioToCanvas = {
   '16:9': { width: 1280, height: 720, ppt: { w: 13.333, h: 7.5 }, layout: 'LAYOUT_WIDE' },
@@ -421,6 +425,16 @@ function showDragTooltip(clientX, clientY, mode, text) {
   els.dragTooltip.className = `drag-tooltip mode-${mode}`;
   els.dragTooltip.style.left = `${clientX + 16}px`;
   els.dragTooltip.style.top = `${clientY - 36}px`;
+}
+
+function ensureDragTooltipImage(event) {
+  if (!event?.dataTransfer) return;
+  if (!transparentDragImage) {
+    transparentDragImage = document.createElement('canvas');
+    transparentDragImage.width = 1;
+    transparentDragImage.height = 1;
+  }
+  event.dataTransfer.setDragImage(transparentDragImage, 0, 0);
 }
 
 function hideDragTooltip() {
@@ -602,6 +616,12 @@ function resizeGridWithDirectionalExpansion({ left = 0, right = 0, top = 0, bott
     state.previewSlotIndex = nextPreviewRow * nextCols + nextPreviewCol;
   }
 
+  if (state.keyboardPlacement?.type === 'slot' && Number.isInteger(state.keyboardPlacement.slotIndex)) {
+    const sourceRow = Math.floor(state.keyboardPlacement.slotIndex / oldCols);
+    const sourceCol = state.keyboardPlacement.slotIndex % oldCols;
+    state.keyboardPlacement.slotIndex = (sourceRow + appliedTop) * nextCols + (sourceCol + appliedLeft);
+  }
+
   if (state.dragPayload?.type === 'slot' && Number.isInteger(state.dragPayload.slotIndex)) {
     const dragRow = Math.floor(state.dragPayload.slotIndex / oldCols);
     const dragCol = state.dragPayload.slotIndex % oldCols;
@@ -713,6 +733,14 @@ function shrinkGridWithDirectionalReduction({ left = 0, right = 0, top = 0, bott
   state.selectedSlotIndex = mapIndex(state.selectedSlotIndex);
   if (state.previewModalOpen) {
     state.previewSlotIndex = mapIndex(state.previewSlotIndex);
+  }
+  if (state.keyboardPlacement?.type === 'slot' && Number.isInteger(state.keyboardPlacement.slotIndex)) {
+    const mappedSource = mapIndex(state.keyboardPlacement.slotIndex);
+    if (mappedSource == null) {
+      state.keyboardPlacement = null;
+    } else {
+      state.keyboardPlacement.slotIndex = mappedSource;
+    }
   }
   if (state.dragPayload?.type === 'slot' && Number.isInteger(state.dragPayload.slotIndex)) {
     const mappedDragIndex = mapIndex(state.dragPayload.slotIndex);
@@ -1129,11 +1157,12 @@ function applyZoomSize() {
 }
 
 function updateViewportLayout() {
-  const targetWidth = 1660;
-  const targetHeight = 940;
+  const targetWidth = 1480;
+  const targetHeight = 900;
   const widthScale = window.innerWidth / targetWidth;
   const heightScale = window.innerHeight / targetHeight;
-  const uiScale = clamp(Math.min(widthScale, heightScale), 0.68, 1) * state.uiScalePreference;
+  const baseScale = clamp(Math.min(widthScale, heightScale), 0.82, 1);
+  const uiScale = baseScale * state.uiScalePreference;
   document.documentElement.style.setProperty('--ui-scale', uiScale.toFixed(4));
 
   if (!els.appShell) return;
@@ -1504,6 +1533,7 @@ function renderHoldingTray() {
   state.holdingAssetIds = state.holdingAssetIds.filter(id => validIds.has(id));
 
   els.holdingTray.innerHTML = '';
+  els.holdingTray.setAttribute('role', 'list');
   if (els.holdingCount) {
     const count = state.holdingAssetIds.length;
     els.holdingCount.textContent = `${count} staged`;
@@ -1524,24 +1554,33 @@ function renderHoldingTray() {
   for (const assetId of state.holdingAssetIds) {
     const asset = findAssetById(assetId);
     if (!asset) continue;
-    const tile = document.createElement('button');
-    tile.type = 'button';
+    const tile = document.createElement('div');
     tile.className = 'holding-tile';
-    tile.draggable = true;
-    tile.title = `Drag ${asset.name} to place`;
-    tile.setAttribute('aria-label', `Drag ${asset.name} to place`);
+    tile.setAttribute('role', 'listitem');
+
+    const placeBtn = document.createElement('button');
+    placeBtn.type = 'button';
+    placeBtn.className = 'holding-tile-place';
+    placeBtn.draggable = true;
+    placeBtn.title = `Place ${asset.name}`;
+    placeBtn.setAttribute('aria-label', `Place ${asset.name} from the image tray`);
 
     const img = document.createElement('img');
     img.src = asset.thumbUrl;
     img.alt = '';
     img.draggable = false;
-    tile.appendChild(img);
+    placeBtn.appendChild(img);
 
     const label = document.createElement('span');
     label.textContent = asset.name;
-    tile.appendChild(label);
+    placeBtn.appendChild(label);
 
-    tile.addEventListener('dragstart', () => {
+    placeBtn.addEventListener('click', () => {
+      beginKeyboardPlacementFromTray(assetId);
+    });
+
+    placeBtn.addEventListener('dragstart', event => {
+      ensureDragTooltipImage(event);
       clearFlowPreview();
       state.dragPayload = { type: 'asset', assetId, source: 'holding' };
       announceDragExpansion(`Dragging staged image ${asset.name}`);
@@ -1549,7 +1588,7 @@ function renderHoldingTray() {
       state.lastDragExpandAt = 0;
     });
 
-    tile.addEventListener('dragend', () => {
+    placeBtn.addEventListener('dragend', () => {
       clearFlowPreview();
       const collapsed = finalizeAutoExpandSession();
       state.dragPayload = null;
@@ -1559,6 +1598,8 @@ function renderHoldingTray() {
         renderAll();
       }
     });
+
+    tile.appendChild(placeBtn);
 
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
@@ -1778,6 +1819,206 @@ function clearGridSelection({ rerender = true } = {}) {
   return true;
 }
 
+function getSlotRowCol(index) {
+  return {
+    row: Math.floor(index / state.cols),
+    col: index % state.cols
+  };
+}
+
+function getGridSlotButton(index) {
+  if (!els.grid) return null;
+  return els.grid.querySelector(`.grid-cell-slot[data-index="${index}"]`);
+}
+
+function focusGridSlot(index) {
+  const button = getGridSlotButton(index);
+  if (!button) return false;
+  button.focus();
+  return true;
+}
+
+function focusAfterRender(index) {
+  requestAnimationFrame(() => {
+    focusGridSlot(index);
+  });
+}
+
+function buildSlotAriaLabel(index, assetId = state.grid[index]) {
+  const { row, col } = getSlotRowCol(index);
+  const parts = [`Slot ${index + 1}`, `row ${row + 1}`, `column ${col + 1}`];
+  const asset = assetId ? findAssetById(assetId) : null;
+
+  if (asset) {
+    parts.push(`filled with ${getDisplayName(asset.name)}`);
+  } else {
+    parts.push('empty');
+  }
+
+  if (state.selectedSlotIndex === index) {
+    parts.push('selected');
+  }
+
+  if (state.keyboardPlacement?.type === 'slot' && state.keyboardPlacement.slotIndex === index) {
+    parts.push('picked up for move');
+  }
+
+  parts.push('Press Enter or Space to select');
+  if (asset) {
+    parts.push('Press M to move');
+    parts.push('Press P to preview');
+  }
+  if (state.keyboardPlacement) {
+    parts.push('Press Enter to place here or Escape to cancel');
+    parts.push('Press Shift+Enter to insert with row reflow');
+  }
+
+  return parts.join(', ');
+}
+
+function moveGridFocus(index, key) {
+  const { row, col } = getSlotRowCol(index);
+  let nextIndex = index;
+
+  if (key === 'ArrowRight' && col < state.cols - 1) nextIndex = index + 1;
+  if (key === 'ArrowLeft' && col > 0) nextIndex = index - 1;
+  if (key === 'ArrowDown' && row < state.rows - 1) nextIndex = index + state.cols;
+  if (key === 'ArrowUp' && row > 0) nextIndex = index - state.cols;
+
+  if (nextIndex !== index) {
+    focusGridSlot(nextIndex);
+    return true;
+  }
+  return false;
+}
+
+function expandGridForKeyboardPlacement(index, key) {
+  const { row, col } = getSlotRowCol(index);
+  let expansion = null;
+  let nextIndex = index;
+
+  if (key === 'ArrowRight' && col === state.cols - 1) {
+    expansion = resizeGridWithDirectionalExpansion({ right: 1 });
+    nextIndex = row * state.cols + col + 1;
+  } else if (key === 'ArrowLeft' && col === 0) {
+    expansion = resizeGridWithDirectionalExpansion({ left: 1 });
+    nextIndex = row * state.cols;
+  } else if (key === 'ArrowDown' && row === state.rows - 1) {
+    expansion = resizeGridWithDirectionalExpansion({ bottom: 1 });
+    nextIndex = (row + 1) * state.cols + col;
+  } else if (key === 'ArrowUp' && row === 0) {
+    expansion = resizeGridWithDirectionalExpansion({ top: 1 });
+    nextIndex = col;
+  }
+
+  if (!expansion?.changed) {
+    return false;
+  }
+
+  state.selectedSlotIndex = clamp(nextIndex, 0, Math.max(0, state.grid.length - 1));
+  renderAll();
+  focusAfterRender(state.selectedSlotIndex);
+  showToast(`Expanded grid to ${state.cols} columns by ${state.rows} rows while moving.`);
+  return true;
+}
+
+function beginKeyboardPlacementFromSlot(index) {
+  if (!state.grid[index]) return false;
+  state.keyboardPlacement = { type: 'slot', slotIndex: index };
+  state.selectedSlotIndex = index;
+  state.multiSelectedSlots = [index];
+  renderGrid();
+  focusAfterRender(index);
+  showToast(`Picked up slot ${index + 1}. Move with arrow keys, press Enter to drop, or Escape to cancel.`);
+  return true;
+}
+
+function beginKeyboardPlacementFromTray(assetId) {
+  const asset = findAssetById(assetId);
+  if (!asset) return false;
+  state.keyboardPlacement = { type: 'asset', assetId };
+  renderHoldingTray();
+  const emptyIndex = state.grid.findIndex(slot => slot === null);
+  const targetIndex = Number.isInteger(state.selectedSlotIndex)
+    ? clamp(state.selectedSlotIndex, 0, Math.max(0, state.grid.length - 1))
+    : (emptyIndex >= 0 ? emptyIndex : 0);
+  focusAfterRender(targetIndex);
+  showToast(`Ready to place ${asset.name}. Move to a slot and press Enter, or Escape to cancel.`);
+  return true;
+}
+
+function cancelKeyboardPlacement() {
+  if (!state.keyboardPlacement) return false;
+  const focusIndex = Number.isInteger(state.selectedSlotIndex) ? state.selectedSlotIndex : 0;
+  state.keyboardPlacement = null;
+  renderAll();
+  focusAfterRender(focusIndex);
+  showToast('Move cancelled');
+  return true;
+}
+
+function completeKeyboardPlacement(targetIndex) {
+  const placement = state.keyboardPlacement;
+  if (!placement) return false;
+
+  state.keyboardPlacement = null;
+  state.selectedSlotIndex = targetIndex;
+  state.multiSelectedSlots = state.grid[targetIndex] ? [targetIndex] : [];
+
+  if (placement.type === 'slot') {
+    if (placement.slotIndex === targetIndex) {
+      renderAll();
+      focusAfterRender(targetIndex);
+      showToast(`Kept image in slot ${targetIndex + 1}`);
+      return true;
+    }
+    swapGridSlots(placement.slotIndex, targetIndex);
+    focusAfterRender(targetIndex);
+    showToast(`Moved image to slot ${targetIndex + 1}`);
+    return true;
+  }
+
+  if (placement.type === 'asset') {
+    placeAssetInSlot(placement.assetId, targetIndex);
+    focusAfterRender(targetIndex);
+    showToast(`Placed image into slot ${targetIndex + 1}`);
+    return true;
+  }
+
+  return false;
+}
+
+function completeKeyboardFlowPlacement(targetIndex, placement = 'before') {
+  const move = state.keyboardPlacement;
+  if (!move) return false;
+
+  const targetRow = Math.floor(targetIndex / state.cols);
+  const targetCol = targetIndex % state.cols;
+  const insertCol = clamp(placement === 'after' ? targetCol + 1 : targetCol, 0, state.cols);
+
+  state.keyboardPlacement = null;
+  state.selectedSlotIndex = targetIndex;
+
+  if (move.type === 'slot') {
+    const sourceIndex = move.slotIndex;
+    if (!Number.isInteger(sourceIndex) || !state.grid[sourceIndex]) {
+      renderAll();
+      return false;
+    }
+    placeGroupInRowFlow([sourceIndex], targetRow, insertCol);
+    focusAfterRender(Math.min(targetRow * state.cols + insertCol, state.grid.length - 1));
+    return true;
+  }
+
+  if (move.type === 'asset') {
+    placeAssetInRowFlow(move.assetId, targetRow, insertCol);
+    focusAfterRender(Math.min(targetRow * state.cols + insertCol, state.grid.length - 1));
+    return true;
+  }
+
+  return false;
+}
+
 function renderGapControls() {
   if (!els.gapControlsContainer) return;
 
@@ -1833,6 +2074,18 @@ function clearFlowPreview() {
     if (existingLine) existingLine.classList.add('hidden');
     els.grid.querySelectorAll('.flow-insert-before, .flow-insert-after, .swap-mode, .shift-preview-right').forEach(node => {
       node.classList.remove('flow-insert-before', 'flow-insert-after', 'swap-mode', 'shift-preview-right');
+  });
+}
+
+function closeCellActionMenus(except = null) {
+  document.querySelectorAll('.cell-actions.open').forEach(container => {
+    if (!(container instanceof HTMLElement)) return;
+    if (except && container === except) return;
+    container.classList.remove('open');
+    const toggle = container.querySelector('.cell-actions-toggle');
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', 'false');
+    }
   });
 }
 
@@ -1899,7 +2152,7 @@ function resolveFlowInsertionForCell(index, event) {
   // Only trigger insert/reflow when the pointer is genuinely near the cell edge.
   const edgeBandPx = clamp(axisSize * 0.16, 10, 22);
   const edgeRatio = edgeBandPx / Math.max(1, axisSize);
-  const nearBetween = ratio <= edgeRatio || ratio >= (1 - edgeRatio);
+  const nearBetween = event.shiftKey || ratio <= edgeRatio || ratio >= (1 - edgeRatio);
 
   return {
     insertionIndex,
@@ -2145,6 +2398,132 @@ function removeColumnAt(colIndex) {
   normalizeMultiSelection();
   renderAll();
   showToast(`Removed column ${colIndex + 1}`);
+}
+
+function insertColumnAt(insertAt) {
+  const oldRows = state.rows;
+  const oldCols = state.cols;
+  const boundedInsertAt = clamp(insertAt, 0, oldCols);
+  const newCols = oldCols + 1;
+  const oldGrid = state.grid.slice();
+  const newGrid = new Array(oldRows * newCols).fill(null);
+
+  for (let row = 0; row < oldRows; row += 1) {
+    for (let col = 0; col < oldCols; col += 1) {
+      const sourceIndex = row * oldCols + col;
+      const targetCol = col >= boundedInsertAt ? col + 1 : col;
+      const targetIndex = row * newCols + targetCol;
+      newGrid[targetIndex] = oldGrid[sourceIndex] || null;
+    }
+  }
+
+  const oldGaps = state.columnGaps.slice();
+  const newGaps = [];
+  for (let gapIndex = 0; gapIndex < newCols - 1; gapIndex += 1) {
+    if (boundedInsertAt === 0) {
+      newGaps.push(gapIndex === 0 ? state.globalGapX : (oldGaps[gapIndex - 1] ?? state.globalGapX));
+      continue;
+    }
+    if (boundedInsertAt === oldCols) {
+      newGaps.push(gapIndex === newCols - 2 ? state.globalGapX : (oldGaps[gapIndex] ?? state.globalGapX));
+      continue;
+    }
+    if (gapIndex < boundedInsertAt - 1) {
+      newGaps.push(oldGaps[gapIndex] ?? state.globalGapX);
+    } else if (gapIndex === boundedInsertAt - 1) {
+      newGaps.push(state.globalGapX);
+    } else if (gapIndex === boundedInsertAt) {
+      newGaps.push(oldGaps[boundedInsertAt - 1] ?? state.globalGapX);
+    } else {
+      newGaps.push(oldGaps[gapIndex - 1] ?? state.globalGapX);
+    }
+  }
+
+  const mapIndex = index => {
+    if (!Number.isInteger(index)) return null;
+    const row = Math.floor(index / oldCols);
+    const col = index % oldCols;
+    const nextCol = col >= boundedInsertAt ? col + 1 : col;
+    return row * newCols + nextCol;
+  };
+
+  pushHistory(`Insert column ${boundedInsertAt + 1}`);
+  state.cols = newCols;
+  state.grid = newGrid;
+  state.columnGaps = newGaps;
+  normalizeColumnGaps();
+  state.canvasWidth = Math.max(1, state.canvasWidth + state.cellWidth + state.globalGapX);
+
+  state.selectedSlotIndex = mapIndex(state.selectedSlotIndex);
+  if (state.previewModalOpen) {
+    state.previewSlotIndex = mapIndex(state.previewSlotIndex);
+  }
+
+  if (state.dragPayload?.type === 'slot' && Number.isInteger(state.dragPayload.slotIndex)) {
+    state.dragPayload.slotIndex = mapIndex(state.dragPayload.slotIndex);
+  }
+  if (state.dragPayload?.type === 'group' && Array.isArray(state.dragPayload.slotIndices)) {
+    state.dragPayload.slotIndices = state.dragPayload.slotIndices.map(mapIndex).filter(index => index != null);
+  }
+  if (state.keyboardPlacement?.type === 'slot' && Number.isInteger(state.keyboardPlacement.slotIndex)) {
+    state.keyboardPlacement.slotIndex = mapIndex(state.keyboardPlacement.slotIndex);
+  }
+  state.multiSelectedSlots = state.multiSelectedSlots.map(mapIndex).filter(index => index != null);
+
+  clearFlowPreview();
+  renderAll();
+  showToast(`Inserted column ${boundedInsertAt + 1}`);
+}
+
+function insertRowAt(insertAt) {
+  const oldRows = state.rows;
+  const oldCols = state.cols;
+  const boundedInsertAt = clamp(insertAt, 0, oldRows);
+  const newRows = oldRows + 1;
+  const oldGrid = state.grid.slice();
+  const newGrid = new Array(newRows * oldCols).fill(null);
+
+  for (let row = 0; row < oldRows; row += 1) {
+    const targetRow = row >= boundedInsertAt ? row + 1 : row;
+    for (let col = 0; col < oldCols; col += 1) {
+      const sourceIndex = row * oldCols + col;
+      const targetIndex = targetRow * oldCols + col;
+      newGrid[targetIndex] = oldGrid[sourceIndex] || null;
+    }
+  }
+
+  const mapIndex = index => {
+    if (!Number.isInteger(index)) return null;
+    const row = Math.floor(index / oldCols);
+    const col = index % oldCols;
+    const nextRow = row >= boundedInsertAt ? row + 1 : row;
+    return nextRow * oldCols + col;
+  };
+
+  pushHistory(`Insert row ${boundedInsertAt + 1}`);
+  state.rows = newRows;
+  state.grid = newGrid;
+  state.canvasHeight = Math.max(1, state.canvasHeight + state.cellHeight + state.gapY);
+
+  state.selectedSlotIndex = mapIndex(state.selectedSlotIndex);
+  if (state.previewModalOpen) {
+    state.previewSlotIndex = mapIndex(state.previewSlotIndex);
+  }
+
+  if (state.dragPayload?.type === 'slot' && Number.isInteger(state.dragPayload.slotIndex)) {
+    state.dragPayload.slotIndex = mapIndex(state.dragPayload.slotIndex);
+  }
+  if (state.dragPayload?.type === 'group' && Array.isArray(state.dragPayload.slotIndices)) {
+    state.dragPayload.slotIndices = state.dragPayload.slotIndices.map(mapIndex).filter(index => index != null);
+  }
+  if (state.keyboardPlacement?.type === 'slot' && Number.isInteger(state.keyboardPlacement.slotIndex)) {
+    state.keyboardPlacement.slotIndex = mapIndex(state.keyboardPlacement.slotIndex);
+  }
+  state.multiSelectedSlots = state.multiSelectedSlots.map(mapIndex).filter(index => index != null);
+
+  clearFlowPreview();
+  renderAll();
+  showToast(`Inserted row ${boundedInsertAt + 1}`);
 }
 
 // "Reflow" counterparts to removeRowAt/removeColumnAt: instead of trimming the
@@ -2615,8 +2994,7 @@ function closePreviewModal() {
   state.previewSlotIndex = null;
   previewRenderToken += 1;
   releasePreviewObjectUrl();
-  els.previewModal.classList.remove('show');
-  els.previewModal.setAttribute('aria-hidden', 'true');
+  closeModal(els.previewModal);
 }
 
 async function syncPreviewModal() {
@@ -2685,6 +3063,7 @@ function openPreviewModal(slotIndex) {
   if (!assetId) return;
   state.previewModalOpen = true;
   state.previewSlotIndex = slotIndex;
+  openModal(els.previewModal, { focusTarget: els.previewCloseBtn });
   syncPreviewModal();
 }
 
@@ -2699,6 +3078,70 @@ function stepPreview(direction) {
 }
 
 function createGridEdgeButtons(metrics) {
+  for (let boundary = 0; boundary <= state.cols; boundary += 1) {
+    let x = 0;
+    if (boundary === 0) {
+      x = metrics.offsetX;
+    } else if (boundary === state.cols) {
+      x = metrics.offsetX + metrics.width;
+    } else {
+      const prevRight = metrics.offsetX + metrics.columnOffsets[boundary - 1] + metrics.cellWidth;
+      const nextLeft = metrics.offsetX + metrics.columnOffsets[boundary];
+      x = (prevRight + nextLeft) / 2;
+    }
+
+    const addColBtn = document.createElement('button');
+    addColBtn.type = 'button';
+    addColBtn.className = 'edge-add-btn edge-add-col';
+    addColBtn.title = boundary === state.cols
+      ? 'Add column at end'
+      : `Add column before ${boundary + 1}`;
+    addColBtn.setAttribute('aria-label', boundary === state.cols
+      ? 'Add column at end'
+      : `Add column before ${boundary + 1}`);
+    addColBtn.textContent = '+';
+    addColBtn.style.left = `${(x / metrics.width) * 100}%`;
+    addColBtn.style.top = '0%';
+    addColBtn.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      insertColumnAt(boundary);
+    });
+    els.grid.appendChild(addColBtn);
+  }
+
+  for (let boundary = 0; boundary <= state.rows; boundary += 1) {
+    let y = 0;
+    if (boundary === 0) {
+      y = metrics.offsetY;
+    } else if (boundary === state.rows) {
+      y = metrics.offsetY + metrics.height;
+    } else {
+      const prevBottom = metrics.offsetY + (boundary - 1) * (metrics.cellHeight + state.gapY) + metrics.cellHeight;
+      const nextTop = metrics.offsetY + boundary * (metrics.cellHeight + state.gapY);
+      y = (prevBottom + nextTop) / 2;
+    }
+
+    const addRowBtn = document.createElement('button');
+    addRowBtn.type = 'button';
+    addRowBtn.className = 'edge-add-btn edge-add-row';
+    addRowBtn.title = boundary === state.rows
+      ? 'Add row at end'
+      : `Add row before ${boundary + 1}`;
+    addRowBtn.setAttribute('aria-label', boundary === state.rows
+      ? 'Add row at end'
+      : `Add row before ${boundary + 1}`);
+    addRowBtn.textContent = '+';
+    addRowBtn.style.left = '0%';
+    addRowBtn.style.top = `${(y / metrics.height) * 100}%`;
+    addRowBtn.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      insertRowAt(boundary);
+    });
+    els.grid.appendChild(addRowBtn);
+  }
+
   if (state.cols > 1) {
     for (let col = 0; col < state.cols; col += 1) {
       const x = metrics.offsetX + metrics.columnOffsets[col] + metrics.cellWidth / 2;
@@ -2829,15 +3272,17 @@ function createGridCell(assetId, index, frame) {
   const cell = document.createElement('div');
   cell.className = 'grid-cell';
   cell.dataset.index = String(index);
-  cell.draggable = Boolean(assetId);
-  cell.tabIndex = 0;
-  cell.setAttribute('role', 'button');
-  cell.setAttribute('aria-label', `Slot ${index + 1}${assetId ? ', filled' : ', empty'}`);
+  cell.setAttribute('role', 'listitem');
+  cell.setAttribute('aria-posinset', String(index + 1));
+  cell.setAttribute('aria-setsize', String(state.grid.length));
   if (state.selectedSlotIndex === index) {
     cell.classList.add('selected');
   }
   if (state.multiSelectedSlots.includes(index)) {
     cell.classList.add('multi-selected');
+  }
+  if (state.keyboardPlacement?.type === 'slot' && state.keyboardPlacement.slotIndex === index) {
+    cell.classList.add('keyboard-placement-source');
   }
   const col = index % state.cols;
   if (getGapAfterColumn(col) === 0) {
@@ -2851,36 +3296,78 @@ function createGridCell(assetId, index, frame) {
   cell.style.width = `${frame.width}%`;
   cell.style.height = `${frame.height}%`;
 
+  const slotButton = document.createElement('button');
+  slotButton.type = 'button';
+  slotButton.className = 'grid-cell-slot';
+  slotButton.dataset.index = String(index);
+  slotButton.draggable = Boolean(assetId);
+  slotButton.setAttribute('aria-label', buildSlotAriaLabel(index, assetId));
+
   const indexLabel = document.createElement('div');
   indexLabel.className = 'grid-cell-index';
   indexLabel.textContent = String(index + 1);
-  cell.appendChild(indexLabel);
+  slotButton.appendChild(indexLabel);
 
   const empty = document.createElement('div');
   empty.className = 'grid-cell-empty';
 
   const actions = document.createElement('div');
   actions.className = 'cell-actions';
+
+  const actionToggle = document.createElement('button');
+  actionToggle.type = 'button';
+  actionToggle.className = 'cell-actions-toggle';
+  actionToggle.textContent = '…';
+  actionToggle.title = 'Cell actions';
+  actionToggle.setAttribute('aria-label', `Open actions for slot ${index + 1}`);
+  actionToggle.setAttribute('aria-haspopup', 'menu');
+  actionToggle.setAttribute('aria-expanded', 'false');
+
+  const actionMenu = document.createElement('div');
+  actionMenu.className = 'cell-actions-popover';
+  actionMenu.setAttribute('role', 'menu');
+  actionMenu.setAttribute('aria-label', `Actions for slot ${index + 1}`);
+
+  const previewBtn = document.createElement('button');
+  previewBtn.type = 'button';
+  previewBtn.textContent = `◱ Preview`;
+  previewBtn.title = 'Preview image';
+  previewBtn.setAttribute('aria-label', 'Preview image');
+  previewBtn.setAttribute('role', 'menuitem');
+  previewBtn.disabled = !assetId;
+  const moveBtn = document.createElement('button');
+  moveBtn.type = 'button';
+  moveBtn.textContent = `↕ Move`;
+  moveBtn.title = 'Move image with keyboard';
+  moveBtn.setAttribute('aria-label', 'Move image with keyboard');
+  moveBtn.setAttribute('role', 'menuitem');
+  moveBtn.disabled = !assetId;
   const replaceBtn = document.createElement('button');
   replaceBtn.type = 'button';
-  replaceBtn.textContent = assetId ? '↺' : '+';
+  replaceBtn.textContent = assetId ? '↺ Replace' : '+ Add';
   replaceBtn.title = assetId ? 'Replace image' : 'Add image';
   replaceBtn.setAttribute('aria-label', assetId ? 'Replace image' : 'Add image');
+  replaceBtn.setAttribute('role', 'menuitem');
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
-  removeBtn.textContent = '×';
+  removeBtn.textContent = '× Clear';
   removeBtn.title = 'Clear cell';
   removeBtn.setAttribute('aria-label', 'Clear cell');
+  removeBtn.setAttribute('role', 'menuitem');
   removeBtn.disabled = !assetId;
   const pasteBtn = document.createElement('button');
   pasteBtn.type = 'button';
-  pasteBtn.className = 'paste-btn';
-  pasteBtn.textContent = '📋';
+  pasteBtn.textContent = '📋 Paste';
   pasteBtn.title = 'Paste image from clipboard';
   pasteBtn.setAttribute('aria-label', 'Paste image from clipboard');
-  actions.appendChild(replaceBtn);
-  actions.appendChild(removeBtn);
-  actions.appendChild(pasteBtn);
+  pasteBtn.setAttribute('role', 'menuitem');
+  actionMenu.appendChild(previewBtn);
+  actionMenu.appendChild(moveBtn);
+  actionMenu.appendChild(replaceBtn);
+  actionMenu.appendChild(removeBtn);
+  actionMenu.appendChild(pasteBtn);
+  actions.appendChild(actionToggle);
+  actions.appendChild(actionMenu);
 
   if (assetId) {
     const asset = findAssetById(assetId);
@@ -2897,38 +3384,78 @@ function createGridCell(assetId, index, frame) {
       img.loading = 'lazy';
       img.style.objectFit = state.fit;
       img.style.objectPosition = 'center';
-      cell.appendChild(img);
+      slotButton.appendChild(img);
 
       const caption = document.createElement('div');
       caption.className = 'grid-cell-caption';
       caption.textContent = getDisplayName(asset.name);
       caption.title = asset.name;
-      cell.appendChild(caption);
+      slotButton.appendChild(caption);
     }
   }
 
   if (!assetId) {
-    cell.appendChild(empty);
+    slotButton.appendChild(empty);
   }
 
+  cell.appendChild(slotButton);
   cell.appendChild(actions);
 
-  replaceBtn.addEventListener('click', () => {
+  previewBtn.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeCellActionMenus();
+    openPreviewModal(index);
+  });
+
+  moveBtn.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeCellActionMenus();
+    beginKeyboardPlacementFromSlot(index);
+  });
+
+  replaceBtn.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeCellActionMenus();
     replaceGridSlot(index);
   });
 
-  removeBtn.addEventListener('click', () => {
+  removeBtn.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeCellActionMenus();
     clearGridSlot(index);
   });
 
   pasteBtn.addEventListener('click', async event => {
     event.preventDefault();
     event.stopPropagation();
+    closeCellActionMenus();
     await handlePaste(index);
   });
 
-  cell.addEventListener('dragstart', () => {
+  actionToggle.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const opening = !actions.classList.contains('open');
+    closeCellActionMenus(actions);
+    actions.classList.toggle('open', opening);
+    actionToggle.setAttribute('aria-expanded', opening ? 'true' : 'false');
+  });
+
+  actionToggle.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    actions.classList.remove('open');
+    actionToggle.setAttribute('aria-expanded', 'false');
+    slotButton.focus();
+  });
+
+  slotButton.addEventListener('dragstart', event => {
     if (!assetId) return;
+    ensureDragTooltipImage(event);
     clearFlowPreview();
     const dragSlots = getActiveDragSlots(index);
     if (dragSlots.length > 1) {
@@ -2942,7 +3469,7 @@ function createGridCell(assetId, index, frame) {
     state.lastDragExpandAt = 0;
   });
 
-  cell.addEventListener('dragend', () => {
+  slotButton.addEventListener('dragend', () => {
     clearFlowPreview();
     const collapsed = finalizeAutoExpandSession();
     state.dragPayload = null;
@@ -2954,7 +3481,7 @@ function createGridCell(assetId, index, frame) {
   });
 
   cell.addEventListener('dragover', event => {
-    event.preventDefault();
+    cell.classList.add('drag-over');
     if (state.dragPayload?.type === 'slot' || state.dragPayload?.type === 'group' || state.dragPayload?.type === 'asset') {
       const flow = resolveFlowInsertionForCell(index, event);
       clearFlowPreview();
@@ -3063,17 +3590,65 @@ function createGridCell(assetId, index, frame) {
       return;
     }
     renderGrid();
+    focusAfterRender(index);
   };
 
-  cell.addEventListener('click', activateCell);
+  slotButton.addEventListener('click', activateCell);
 
-  cell.addEventListener('keydown', async event => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    await activateCell(event);
+  slotButton.addEventListener('keydown', async event => {
+    if (event.key.startsWith('Arrow')) {
+      if (state.keyboardPlacement && expandGridForKeyboardPlacement(index, event.key)) {
+        event.preventDefault();
+        return;
+      }
+      if (moveGridFocus(index, event.key)) {
+        event.preventDefault();
+      }
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      if (cancelKeyboardPlacement()) {
+        event.preventDefault();
+      }
+      return;
+    }
+
+    if ((event.key === 'Enter' || event.key === ' ') && state.keyboardPlacement) {
+      event.preventDefault();
+      if (event.shiftKey) {
+        completeKeyboardFlowPlacement(index, event.altKey ? 'after' : 'before');
+      } else {
+        completeKeyboardPlacement(index);
+      }
+      return;
+    }
+
+    if (state.keyboardPlacement && (event.key === '[' || event.key === ']')) {
+      event.preventDefault();
+      completeKeyboardFlowPlacement(index, event.key === ']' ? 'after' : 'before');
+      return;
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      await activateCell(event);
+      return;
+    }
+
+    if (assetId && event.key.toLowerCase() === 'm') {
+      event.preventDefault();
+      beginKeyboardPlacementFromSlot(index);
+      return;
+    }
+
+    if (assetId && (event.key.toLowerCase() === 'p' || event.key.toLowerCase() === 'v')) {
+      event.preventDefault();
+      openPreviewModal(index);
+    }
   });
 
-  cell.addEventListener('dblclick', event => {
+  slotButton.addEventListener('dblclick', event => {
     event.preventDefault();
     if (assetId) {
       openPreviewModal(index);
@@ -3085,6 +3660,7 @@ function createGridCell(assetId, index, frame) {
 
 function renderGrid() {
   els.grid.innerHTML = '';
+  els.grid.setAttribute('role', 'list');
   normalizeMultiSelection();
   const metrics = getLayoutMetrics();
 
@@ -4094,14 +4670,59 @@ function toggleMenu(menuEl, buttonEl) {
   closeTopMenus();
   menuEl.hidden = !willOpen;
   buttonEl.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  if (willOpen) {
+    requestAnimationFrame(() => {
+      const first = getFocusableElements(menuEl)[0];
+      if (first) first.focus();
+    });
+  }
 }
 
 function getOpenModalElement() {
-  const ordered = [els.docLightboxModal, els.docImportModal, els.historyModal, els.exportLogModal, els.replaceOptionsModal, els.importModeModal, els.overflowModal];
-  for (const modal of ordered) {
-    if (modal?.classList.contains('show')) return modal;
+  return getManagedModals()
+    .filter(modal => modal?.classList.contains('show'))
+    .sort((left, right) => Number(right?.dataset.modalOrder || 0) - Number(left?.dataset.modalOrder || 0))[0] || null;
+}
+
+function getManagedModals() {
+  return [
+    els.docImportModal,
+    els.docLightboxModal,
+    els.previewModal,
+    els.historyModal,
+    els.exportLogModal,
+    els.helpModal,
+    els.replaceOptionsModal,
+    els.importModeModal,
+    els.overflowModal,
+    els.lucidSendModal,
+    els.lucidSettingsModal
+  ].filter(Boolean);
+}
+
+function syncModalAccessibilityState() {
+  const openModalEl = getOpenModalElement();
+  const managedModals = getManagedModals();
+
+  if (els.appShell) {
+    els.appShell.inert = Boolean(openModalEl);
+    if (openModalEl) {
+      els.appShell.setAttribute('aria-hidden', 'true');
+    } else {
+      els.appShell.removeAttribute('aria-hidden');
+    }
   }
-  return null;
+
+  for (const modalEl of managedModals) {
+    const isShown = modalEl.classList.contains('show');
+    const isTop = modalEl === openModalEl;
+    modalEl.inert = isShown && !isTop;
+    if (isShown && isTop) {
+      modalEl.removeAttribute('aria-hidden');
+    } else {
+      modalEl.setAttribute('aria-hidden', 'true');
+    }
+  }
 }
 
 function getFocusableElements(container) {
@@ -4117,24 +4738,36 @@ function focusFirstInModal(modalEl) {
   }
 }
 
-function openModal(modalEl) {
+function openModal(modalEl, { focusTarget = null } = {}) {
   if (!modalEl) return;
   if (!modalEl.classList.contains('show')) {
-    state.modalFocusReturnEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    state.modalFocusStack.push({
+      modalEl,
+      returnEl: document.activeElement instanceof HTMLElement ? document.activeElement : null
+    });
   }
   modalEl.classList.add('show');
-  modalEl.setAttribute('aria-hidden', 'false');
-  requestAnimationFrame(() => focusFirstInModal(modalEl));
+  modalEl.dataset.modalOrder = String(++modalOpenSequence);
+  syncModalAccessibilityState();
+  requestAnimationFrame(() => {
+    if (focusTarget instanceof HTMLElement && modalEl.classList.contains('show')) {
+      focusTarget.focus();
+      return;
+    }
+    focusFirstInModal(modalEl);
+  });
 }
 
 function closeModal(modalEl, { restoreFocus = true } = {}) {
   if (!modalEl) return;
   modalEl.classList.remove('show');
-  modalEl.setAttribute('aria-hidden', 'true');
-  if (restoreFocus && state.modalFocusReturnEl instanceof HTMLElement) {
-    state.modalFocusReturnEl.focus();
+  delete modalEl.dataset.modalOrder;
+  const stackIndex = state.modalFocusStack.findLastIndex(entry => entry.modalEl === modalEl);
+  const stackEntry = stackIndex >= 0 ? state.modalFocusStack.splice(stackIndex, 1)[0] : null;
+  syncModalAccessibilityState();
+  if (restoreFocus && stackEntry?.returnEl instanceof HTMLElement) {
+    stackEntry.returnEl.focus();
   }
-  state.modalFocusReturnEl = null;
 }
 
 function trapModalTabKey(event, modalEl) {
@@ -4189,10 +4822,18 @@ function handleOpenModalKeydown(event) {
       closeModal(els.historyModal);
     } else if (openModalEl === els.exportLogModal) {
       closeModal(els.exportLogModal);
+    } else if (openModalEl === els.helpModal) {
+      closeModal(els.helpModal);
     } else if (openModalEl === els.docLightboxModal) {
       closeDocLightbox();
+    } else if (openModalEl === els.previewModal) {
+      closePreviewModal();
     } else if (openModalEl === els.docImportModal) {
       closeDocImportModal();
+    } else if (openModalEl === els.lucidSendModal) {
+      closeModal(els.lucidSendModal);
+    } else if (openModalEl === els.lucidSettingsModal) {
+      closeModal(els.lucidSettingsModal);
     }
     return true;
   }
@@ -4991,6 +5632,8 @@ function renderDocLightbox() {
 
 function renderDocThumbnails() {
   els.docThumbGrid.innerHTML = '';
+  els.docThumbGrid.setAttribute('role', 'listbox');
+  els.docThumbGrid.setAttribute('aria-multiselectable', 'true');
   const thumbs = docImportState.thumbnails;
   els.docResultsInfo.textContent = `${thumbs.length} page${thumbs.length === 1 ? '' : 's'} found`;
 
@@ -5003,8 +5646,9 @@ function renderDocThumbnails() {
     item.className = 'doc-thumb-item'
       + (docImportState.selected.has(idx) ? ' selected' : '')
       + (docImportState.activeIndex === idx ? ' active' : '');
-    item.setAttribute('role', 'listitem');
+    item.setAttribute('role', 'option');
     item.tabIndex = 0;
+    item.setAttribute('aria-selected', docImportState.selected.has(idx) ? 'true' : 'false');
     item.setAttribute('aria-label', `${thumb.label}${docImportState.selected.has(idx) ? ', selected' : ', not selected'}`);
 
     const img = document.createElement('img');
@@ -5030,11 +5674,13 @@ function renderDocThumbnails() {
         docImportState.selected.delete(idx);
         item.classList.remove('selected');
         check.innerHTML = '';
+        item.setAttribute('aria-selected', 'false');
         item.setAttribute('aria-label', `${thumb.label}, not selected`);
       } else {
         docImportState.selected.add(idx);
         item.classList.add('selected');
         check.innerHTML = '✓';
+        item.setAttribute('aria-selected', 'true');
         item.setAttribute('aria-label', `${thumb.label}, selected`);
       }
       updateDocSelectionCount();
@@ -5550,6 +6196,12 @@ function bindEvents() {
   document.addEventListener('click', event => {
     const target = event.target;
     if (!(target instanceof Element)) return;
+    const actionContainer = target.closest('.cell-actions');
+    if (actionContainer instanceof HTMLElement) {
+      closeCellActionMenus(actionContainer);
+      return;
+    }
+    closeCellActionMenus();
     if (target.closest('.menu-wrap')) return;
     closeTopMenus();
 
@@ -5609,6 +6261,7 @@ function bindEvents() {
     }
     
     if (event.key === 'Escape') {
+      closeCellActionMenus();
       closeTopMenus();
     }
   });
@@ -5914,14 +6567,11 @@ function bindEvents() {
     if (els.lucidDocSelection) els.lucidDocSelection.hidden = true;
     updateSendFolderNote();
 
-    els.lucidSendModal?.classList.add('show');
-    els.lucidSendModal?.removeAttribute('aria-hidden');
-    els.lucidSendTitleInput?.focus();
+    openModal(els.lucidSendModal, { focusTarget: els.lucidSendTitleInput });
   }
 
   function closeLucidSendModal() {
-    els.lucidSendModal?.classList.remove('show');
-    els.lucidSendModal?.setAttribute('aria-hidden', 'true');
+    closeModal(els.lucidSendModal);
   }
 
   function updateSendFolderNote() {
@@ -5940,6 +6590,7 @@ function bindEvents() {
 
   function renderDocResults(docs) {
     if (!els.lucidDocResults) return;
+    els.lucidDocResults.setAttribute('role', 'list');
     if (!docs.length) {
       els.lucidDocResults.innerHTML = '<p class="hint" style="padding:8px 10px;margin:0">No documents found.</p>';
       els.lucidDocResults.hidden = false;
@@ -5947,14 +6598,14 @@ function bindEvents() {
     }
     els.lucidDocResults.innerHTML = docs.map(doc => {
       const date = doc.lastModified ? new Date(doc.lastModified).toLocaleDateString() : '';
-      return `<div class="lucid-doc-result-item" role="option" tabindex="0"
+      return `<button class="lucid-doc-result-item" type="button"
                    data-doc-id="${escapeHtml(doc.documentId)}"
                    data-doc-title="${escapeHtml(doc.title)}"
                    data-doc-parent="${doc.parent ?? ''}"
                    data-doc-edit="${escapeHtml(doc.editUrl || '')}">
                 <span class="doc-result-title">${escapeHtml(doc.title)}</span>
                 <span class="doc-result-meta">${escapeHtml(doc.product || '')}${date ? ' · ' + date : ''}</span>
-              </div>`;
+              </button>`;
     }).join('');
     els.lucidDocResults.hidden = false;
   }
@@ -6015,13 +6666,6 @@ function bindEvents() {
     els.lucidDocResults.hidden = true;
     els.lucidDocSelection.hidden = false;
     updateSendFolderNote();
-  });
-
-  els.lucidDocResults?.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      const item = e.target.closest('.lucid-doc-result-item');
-      if (item) item.click();
-    }
   });
 
   els.lucidDocClearBtn?.addEventListener('click', () => {
@@ -6148,7 +6792,7 @@ function bindEvents() {
   // persist it immediately as the numeric value changes, independent of the
   // modal's Save/Cancel buttons (which only govern Lucid API settings).
   const applyUiScaleInput = () => {
-    const pct = normalizeNumericInput(els.uiScaleInput, UI_SCALE_MIN * 100, UI_SCALE_MAX * 100, 100, 5);
+    const pct = normalizeNumericInput(els.uiScaleInput, UI_SCALE_MIN * 100, UI_SCALE_MAX * 100, UI_SCALE_DEFAULT * 100, 5);
     state.uiScalePreference = pct / 100;
     saveUiScalePreference(state.uiScalePreference);
     updateViewportLayout();
@@ -6180,14 +6824,11 @@ function bindEvents() {
     if (els.lucidCustomQualityInput) els.lucidCustomQualityInput.value = settings.customQuality ?? 80;
     if (els.lucidCustomMaxDimensionInput) els.lucidCustomMaxDimensionInput.value = settings.customMaxDimension ?? 1800;
     updateCustomCompressionVisibility();
-    els.lucidSettingsModal?.classList.add('show');
-    els.lucidSettingsModal?.removeAttribute('aria-hidden');
-    els.lucidApiKeyInput?.focus();
+    openModal(els.lucidSettingsModal, { focusTarget: els.lucidApiKeyInput });
   }
 
   function closeLucidSettings() {
-    els.lucidSettingsModal?.classList.remove('show');
-    els.lucidSettingsModal?.setAttribute('aria-hidden', 'true');
+    closeModal(els.lucidSettingsModal);
   }
 
   els.lucidSettingsBtn?.addEventListener('click', () => openLucidSettings());
@@ -6322,6 +6963,21 @@ function bindEvents() {
     }
   });
 
+  els.helpBtn?.addEventListener('click', () => {
+    closeTopMenus();
+    openModal(els.helpModal, { focusTarget: els.helpCloseBtn });
+  });
+
+  els.helpCloseBtn?.addEventListener('click', () => {
+    closeModal(els.helpModal);
+  });
+
+  els.helpModal?.addEventListener('click', event => {
+    if (event.target === els.helpModal) {
+      closeModal(els.helpModal);
+    }
+  });
+
   document.addEventListener('keydown', event => {
     if (!state.previewModalOpen) return;
     if (event.key === 'Escape') {
@@ -6344,6 +7000,7 @@ function bindEvents() {
 function renderHistoryTimeline() {
   const container = document.getElementById('historyTimeline');
   if (!container) return;
+  container.setAttribute('role', 'list');
   
   container.innerHTML = '';
   
@@ -6361,9 +7018,14 @@ function renderHistoryTimeline() {
     const isCurrent = idx === currentIdx - 1 && !isRedo;
     const timeStr = new Date(snapshot.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     
-    const step = document.createElement('div');
+    const step = document.createElement('button');
+    step.type = 'button';
     step.className = `history-step ${isCurrent ? 'current' : ''} ${isRedo ? 'redo' : 'undo'}`;
     step.title = `${snapshot.label} — ${timeStr}`;
+    step.setAttribute('role', 'listitem');
+    if (isCurrent) {
+      step.setAttribute('aria-current', 'step');
+    }
     
     const thumb = document.createElement('div');
     thumb.className = 'history-step-thumb';
@@ -6608,6 +7270,9 @@ function initElements() {
   els.exportLogList = document.getElementById('exportLogList');
   els.exportLogClearBtn = document.getElementById('exportLogClearBtn');
   els.exportLogCloseBtn = document.getElementById('exportLogCloseBtn');
+  els.helpBtn = document.getElementById('helpBtn');
+  els.helpModal = document.getElementById('helpModal');
+  els.helpCloseBtn = document.getElementById('helpCloseBtn');
 
   // Lucid direct-send elements
   els.sendToLucidBtn = document.getElementById('sendToLucidBtn');
