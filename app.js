@@ -104,6 +104,8 @@ const state = {
   grid: [],
   rows: 3,
   cols: 3,
+  globalGapX: 12,
+  columnGaps: [12, 12],
   gapX: 12,
   gapY: 12,
   cellWidth: 160,
@@ -168,6 +170,8 @@ function captureStateSnapshot(label = 'Action') {
       grid: state.grid.slice(),
       rows: state.rows,
       cols: state.cols,
+      globalGapX: state.globalGapX,
+      columnGaps: state.columnGaps.slice(),
       gapX: state.gapX,
       gapY: state.gapY,
       cellWidth: state.cellWidth,
@@ -194,7 +198,11 @@ function restoreStateSnapshot(snapshot) {
   state.grid = s.grid.slice();
   state.rows = s.rows;
   state.cols = s.cols;
-  state.gapX = Number.isFinite(s.gapX) ? s.gapX : (Number.isFinite(s.gap) ? s.gap : 12);
+  state.globalGapX = Number.isFinite(s.globalGapX)
+    ? clamp(s.globalGapX, 0, 120)
+    : (Number.isFinite(s.gapX) ? clamp(s.gapX, 0, 120) : (Number.isFinite(s.gap) ? clamp(s.gap, 0, 120) : 12));
+  state.columnGaps = Array.isArray(s.columnGaps) ? s.columnGaps.slice() : [];
+  state.gapX = state.globalGapX;
   state.gapY = Number.isFinite(s.gapY) ? s.gapY : (Number.isFinite(s.gap) ? s.gap : 12);
   state.cellWidth = s.cellWidth;
   state.cellHeight = s.cellHeight;
@@ -205,6 +213,7 @@ function restoreStateSnapshot(snapshot) {
   state.holdingAssetIds = s.holdingAssetIds.slice();
   state.selectedSlotIndex = s.selectedSlotIndex;
   state.multiSelectedSlots = s.multiSelectedSlots.slice();
+  normalizeColumnGaps();
   
   return true;
 }
@@ -455,10 +464,48 @@ function resetCanvasLayout() {
   state.contentOffsetY = 0;
 }
 
+function normalizeColumnGaps({ reset = false } = {}) {
+  const gapCount = Math.max(0, state.cols - 1);
+  const fallback = clamp(Number(state.globalGapX ?? state.gapX ?? 12) || 12, 0, 120);
+  state.globalGapX = fallback;
+  state.gapX = fallback;
+
+  const source = Array.isArray(state.columnGaps) ? state.columnGaps : [];
+  const next = new Array(gapCount);
+  for (let i = 0; i < gapCount; i += 1) {
+    if (!reset && Number.isFinite(source[i])) {
+      next[i] = clamp(Number(source[i]), 0, 120);
+    } else {
+      next[i] = fallback;
+    }
+  }
+  state.columnGaps = next;
+}
+
+function getGapAfterColumn(colIndex) {
+  if (!Number.isInteger(colIndex)) return 0;
+  if (colIndex < 0 || colIndex >= Math.max(0, state.cols - 1)) return 0;
+  const gap = state.columnGaps[colIndex];
+  return Number.isFinite(gap) ? gap : state.globalGapX;
+}
+
+function getColumnOffsets(cellWidth = state.cellWidth || 160) {
+  const offsets = [];
+  let x = 0;
+  for (let col = 0; col < state.cols; col += 1) {
+    offsets.push(x);
+    x += cellWidth + getGapAfterColumn(col);
+  }
+  return offsets;
+}
+
 function getLayoutMetrics() {
   const cellWidth = state.cellWidth || 160;
   const cellHeight = state.cellHeight || 120;
-  const innerWidth = cellWidth * state.cols + state.gapX * Math.max(0, state.cols - 1);
+  const columnOffsets = getColumnOffsets(cellWidth);
+  const innerWidth = state.cols > 0
+    ? (columnOffsets[state.cols - 1] + cellWidth)
+    : cellWidth;
   const innerHeight = cellHeight * state.rows + state.gapY * Math.max(0, state.rows - 1);
   const width = innerWidth;
   const height = innerHeight;
@@ -467,6 +514,7 @@ function getLayoutMetrics() {
     height,
     cellWidth,
     cellHeight,
+    columnOffsets,
     offsetX: 0,
     offsetY: 0
   };
@@ -499,7 +547,7 @@ function resizeGridWithDirectionalExpansion({ left = 0, right = 0, top = 0, bott
   const appliedTop = Math.min(top, actualRowsAdded);
   const appliedBottom = Math.max(0, actualRowsAdded - appliedTop);
 
-  const colStride = metrics.cellWidth + state.gapX;
+  const colStride = metrics.cellWidth + state.globalGapX;
   const rowStride = metrics.cellHeight + state.gapY;
   const oldRows = state.rows;
   const oldCols = state.cols;
@@ -527,8 +575,15 @@ function resizeGridWithDirectionalExpansion({ left = 0, right = 0, top = 0, bott
     state.panY -= rowStride * appliedTop * state.zoom;
   }
 
+  const previousGaps = state.columnGaps.slice();
   state.rows = nextRows;
   state.cols = nextCols;
+  if (actualColsAdded > 0) {
+    const leftGaps = new Array(appliedLeft).fill(state.globalGapX);
+    const rightGaps = new Array(appliedRight).fill(state.globalGapX);
+    state.columnGaps = leftGaps.concat(previousGaps, rightGaps);
+  }
+  normalizeColumnGaps();
   state.grid = newGrid;
 
   if (state.selectedSlotIndex != null) {
@@ -620,7 +675,7 @@ function shrinkGridWithDirectionalReduction({ left = 0, right = 0, top = 0, bott
     }
   }
 
-  const colStride = metrics.cellWidth + state.gapX;
+  const colStride = metrics.cellWidth + state.globalGapX;
   const rowStride = metrics.cellHeight + state.gapY;
   state.canvasWidth = Math.max(1, state.canvasWidth - colStride * actualColsRemoved);
   state.canvasHeight = Math.max(1, state.canvasHeight - rowStride * actualRowsRemoved);
@@ -633,8 +688,18 @@ function shrinkGridWithDirectionalReduction({ left = 0, right = 0, top = 0, bott
     state.panY += rowStride * appliedTop * state.zoom;
   }
 
+  const nextGaps = state.columnGaps.slice();
+  if (appliedLeft > 0) {
+    nextGaps.splice(0, appliedLeft);
+  }
+  if (appliedRight > 0) {
+    nextGaps.splice(Math.max(0, nextGaps.length - appliedRight), appliedRight);
+  }
+
   state.rows = nextRows;
   state.cols = nextCols;
+  state.columnGaps = nextGaps;
+  normalizeColumnGaps();
   state.grid = newGrid;
 
   const mapIndex = index => {
@@ -944,6 +1009,8 @@ function persistSession() {
     grid: state.grid,
     rows: state.rows,
     cols: state.cols,
+    globalGapX: state.globalGapX,
+    columnGaps: state.columnGaps,
     gapX: state.gapX,
     gapY: state.gapY,
     canvasWidth: state.canvasWidth,
@@ -972,7 +1039,10 @@ async function restoreSession() {
     state.rows = Math.max(1, Math.round(Number(saved.rows || 3)) || 3);
     state.cols = Math.max(1, Math.round(Number(saved.cols || 3)) || 3);
     const legacyGap = clamp(Number(saved.gap || 12), 0, 120);
-    state.gapX = clamp(Number(saved.gapX ?? legacyGap), 0, 120);
+    state.globalGapX = clamp(Number(saved.globalGapX ?? saved.gapX ?? legacyGap), 0, 120);
+    state.gapX = state.globalGapX;
+    state.columnGaps = Array.isArray(saved.columnGaps) ? saved.columnGaps.slice() : [];
+    normalizeColumnGaps();
     state.gapY = clamp(Number(saved.gapY ?? legacyGap), 0, 120);
     state.cellWidth = clamp(Number(saved.cellWidth || 160), 40, 500);
     state.cellHeight = clamp(Number(saved.cellHeight || 120), 40, 500);
@@ -1009,7 +1079,7 @@ function findAssetById(id) {
 function syncSettingsInputs() {
   els.rowsInput.value = String(state.rows);
   els.colsInput.value = String(state.cols);
-  els.gapXInput.value = String(state.gapX);
+  els.gapXInput.value = String(state.globalGapX);
   els.gapYInput.value = String(state.gapY);
   els.cellWidthInput.value = String(state.cellWidth);
   els.cellHeightInput.value = String(state.cellHeight);
@@ -1204,7 +1274,16 @@ function allAssignedIds(gridValues) {
   return ids;
 }
 
-function resizeGridPreserve(newRows, newCols) {
+function findNextEmptySlot(grid, startIndex = 0, endIndex = grid.length) {
+  const from = clamp(Math.floor(startIndex), 0, grid.length);
+  const to = clamp(Math.floor(endIndex), 0, grid.length);
+  for (let i = from; i < to; i += 1) {
+    if (grid[i] === null) return i;
+  }
+  return -1;
+}
+
+function resizeGridPreserve(newRows, newCols, { preserveLeadingGaps = false } = {}) {
   const oldRows = state.rows;
   const oldCols = state.cols;
   const oldGrid = state.grid.slice();
@@ -1222,6 +1301,15 @@ function resizeGridPreserve(newRows, newCols) {
   }
 
   const survivors = allAssignedIds(oldGrid);
+  let appendStart = 0;
+  if (preserveLeadingGaps) {
+    for (let i = newGrid.length - 1; i >= 0; i -= 1) {
+      if (newGrid[i]) {
+        appendStart = i + 1;
+        break;
+      }
+    }
+  }
   const overflow = [];
   for (const id of survivors) {
     let alreadyPlaced = false;
@@ -1232,7 +1320,17 @@ function resizeGridPreserve(newRows, newCols) {
       }
     }
     if (alreadyPlaced) continue;
-    const empty = newGrid.findIndex(v => v === null);
+    let empty = -1;
+    if (preserveLeadingGaps) {
+      // Keep intentionally blank leading slots (for manual offsets/spreads)
+      // unless we run out of trailing capacity.
+      empty = findNextEmptySlot(newGrid, appendStart, newGrid.length);
+      if (empty < 0) {
+        empty = findNextEmptySlot(newGrid, 0, appendStart);
+      }
+    } else {
+      empty = newGrid.findIndex(v => v === null);
+    }
     if (empty >= 0) {
       newGrid[empty] = id;
     } else {
@@ -1240,8 +1338,12 @@ function resizeGridPreserve(newRows, newCols) {
     }
   }
 
+  const colsChanged = state.cols !== newCols;
   state.rows = newRows;
   state.cols = newCols;
+  if (colsChanged) {
+    normalizeColumnGaps();
+  }
   state.grid = newGrid;
   return overflow;
 }
@@ -1637,7 +1739,7 @@ function placeAssetInRowFlow(assetId, targetRow, insertCol) {
     }
     state.cols = newCols;
     state.grid = expandedGrid;
-    state.canvasWidth = Math.max(1, state.canvasWidth + addCols * (state.cellWidth + state.gapX));
+    state.canvasWidth = Math.max(1, state.canvasWidth + addCols * (state.cellWidth + state.globalGapX));
   } else {
     state.grid = tempGrid;
   }
@@ -1663,6 +1765,45 @@ function normalizeMultiSelection() {
     .filter(index => Number.isInteger(index) && index >= 0 && index < state.grid.length && Boolean(state.grid[index]))
     .filter((index, position, array) => array.indexOf(index) === position)
     .sort((a, b) => a - b);
+}
+
+function clearGridSelection({ rerender = true } = {}) {
+  const hadSelection = state.selectedSlotIndex !== null || state.multiSelectedSlots.length > 0;
+  if (!hadSelection) return false;
+  state.selectedSlotIndex = null;
+  state.multiSelectedSlots = [];
+  if (rerender) {
+    renderGrid();
+  }
+  return true;
+}
+
+function renderGapControls() {
+  if (!els.gapControlsContainer) return;
+
+  if (state.cols <= 1) {
+    els.gapControlsContainer.innerHTML = '<p class="hint gap-controls-empty">Add at least 2 columns to configure spread links.</p>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (let i = 0; i < state.columnGaps.length; i += 1) {
+    const button = document.createElement('button');
+    const isLinked = getGapAfterColumn(i) === 0;
+    button.type = 'button';
+    button.className = `mini-button spread-toggle-btn${isLinked ? ' linked' : ''}`;
+    button.dataset.gapIndex = String(i);
+    button.setAttribute('aria-pressed', isLinked ? 'true' : 'false');
+    button.title = isLinked
+      ? `Unlink columns ${i + 1} and ${i + 2}`
+      : `Link columns ${i + 1} and ${i + 2}`;
+    button.textContent = isLinked
+      ? `Linked ${i + 1}↔${i + 2}`
+      : `Gap ${i + 1}|${i + 2}`;
+    fragment.appendChild(button);
+  }
+
+  els.gapControlsContainer.replaceChildren(fragment);
 }
 
 function toggleMultiSelection(index) {
@@ -1721,11 +1862,11 @@ function clearFlowPreview() {
       lineX = -2;
     } else if (insertCol >= state.cols) {
       lineX = metrics.width - 2;
-    } else if (state.gapX <= 0) {
-      lineX = insertCol * metrics.cellWidth - 2;
+    } else if (getGapAfterColumn(insertCol - 1) <= 0) {
+      lineX = metrics.columnOffsets[insertCol] - 2;
     } else {
-      const rightOfPrev = (insertCol - 1) * (metrics.cellWidth + state.gapX) + metrics.cellWidth;
-      const leftOfNext = insertCol * (metrics.cellWidth + state.gapX);
+      const rightOfPrev = metrics.columnOffsets[insertCol - 1] + metrics.cellWidth;
+      const leftOfNext = metrics.columnOffsets[insertCol];
       lineX = (rightOfPrev + leftOfNext) / 2 - 2;
     }
 
@@ -1777,11 +1918,9 @@ function resolveFlowInsertionForGap(event) {
   const scaleY = gridRect.height / Math.max(1, metrics.height);
   const cellWidth = metrics.cellWidth * scaleX;
   const cellHeight = metrics.cellHeight * scaleY;
-  const gapX = state.gapX * scaleX;
   const gapY = state.gapY * scaleY;
-  const strideX = cellWidth + gapX;
   const strideY = cellHeight + gapY;
-  if (cellWidth <= 0 || cellHeight <= 0 || strideX <= 0 || strideY <= 0) return null;
+  if (cellWidth <= 0 || cellHeight <= 0 || strideY <= 0) return null;
 
   const relX = event.clientX - gridRect.left;
   const relY = event.clientY - gridRect.top;
@@ -1795,18 +1934,19 @@ function resolveFlowInsertionForGap(event) {
     return null;
   }
 
-  const col = Math.floor(relX / strideX);
-  if (col < 0 || col >= Math.max(1, state.cols - 1)) return null;
-
-  const localX = relX - col * strideX;
-  if (localX < cellWidth || localX > strideX) {
-    return null;
+  for (let col = 0; col < state.cols - 1; col += 1) {
+    const gapStart = metrics.columnOffsets[col] * scaleX + cellWidth;
+    const gapWidth = getGapAfterColumn(col) * scaleX;
+    const gapEnd = gapStart + gapWidth;
+    if (gapWidth > 0 && relX >= gapStart && relX <= gapEnd) {
+      const targetIndex = row * state.cols + col;
+      const placement = 'after';
+      const insertionIndex = Math.min(targetIndex + 1, state.grid.length);
+      return { targetIndex, insertionIndex, placement, nearBetween: true };
+    }
   }
 
-  const targetIndex = row * state.cols + col;
-  const placement = 'after';
-  const insertionIndex = Math.min(targetIndex + 1, state.grid.length);
-  return { targetIndex, insertionIndex, placement, nearBetween: true };
+  return null;
 }
 
 function placeGroupInFlow(slotIndices, targetIndex) {
@@ -1883,7 +2023,7 @@ function placeGroupInRowFlow(slotIndices, targetRow, insertCol) {
     }
     state.cols = newCols;
     state.grid = expandedGrid;
-    state.canvasWidth = Math.max(1, state.canvasWidth + addCols * (state.cellWidth + state.gapX));
+    state.canvasWidth = Math.max(1, state.canvasWidth + addCols * (state.cellWidth + state.globalGapX));
   } else {
     state.grid = tempGrid;
   }
@@ -1985,9 +2125,17 @@ function removeColumnAt(colIndex) {
     return row * nextCols + nextCol;
   };
 
+  const nextGaps = state.columnGaps.slice();
+  if (nextGaps.length > 0) {
+    const removeGapAt = clamp(colIndex, 0, nextGaps.length - 1);
+    nextGaps.splice(removeGapAt, 1);
+  }
+
   state.cols = nextCols;
+  state.columnGaps = nextGaps;
+  normalizeColumnGaps();
   state.grid = nextGrid;
-  state.canvasWidth = Math.max(1, state.canvasWidth - (metrics.cellWidth + state.gapX));
+  state.canvasWidth = Math.max(1, state.canvasWidth - (metrics.cellWidth + state.globalGapX));
   state.selectedSlotIndex = mapIndex(state.selectedSlotIndex);
   if (state.previewModalOpen) {
     state.previewSlotIndex = mapIndex(state.previewSlotIndex);
@@ -2008,7 +2156,7 @@ function reflowShrinkRows() {
   const required = state.assets.length;
   const nextCols = required > 0 ? minColsForRows(nextRows, required) : state.cols;
   pushHistory(`Decrease rows to ${nextRows} (reflow)`);
-  const overflowIds = resizeGridPreserve(nextRows, nextCols);
+  const overflowIds = resizeGridPreserve(nextRows, nextCols, { preserveLeadingGaps: true });
   if (overflowIds.length > 0) {
     pushAssetsToHolding(overflowIds);
     showToast(`${overflowIds.length} image${overflowIds.length === 1 ? '' : 's'} didn't fit and ${overflowIds.length === 1 ? 'was' : 'were'} staged in the Image Tray.`);
@@ -2023,7 +2171,7 @@ function reflowShrinkCols() {
   const required = state.assets.length;
   const nextRows = required > 0 ? minRowsForCols(nextCols, required) : state.rows;
   pushHistory(`Decrease columns to ${nextCols} (reflow)`);
-  const overflowIds = resizeGridPreserve(nextRows, nextCols);
+  const overflowIds = resizeGridPreserve(nextRows, nextCols, { preserveLeadingGaps: true });
   if (overflowIds.length > 0) {
     pushAssetsToHolding(overflowIds);
     showToast(`${overflowIds.length} image${overflowIds.length === 1 ? '' : 's'} didn't fit and ${overflowIds.length === 1 ? 'was' : 'were'} staged in the Image Tray.`);
@@ -2039,7 +2187,7 @@ function beginAutoExpandSession() {
 
   const rect = els.grid ? els.grid.getBoundingClientRect() : { left: 0, right: 0, top: 0, bottom: 0 };
   const metrics = getLayoutMetrics();
-  const strideX = Math.max(1, (metrics.cellWidth + state.gapX) * state.zoom);
+  const strideX = Math.max(1, (metrics.cellWidth + state.globalGapX) * state.zoom);
   const strideY = Math.max(1, (metrics.cellHeight + state.gapY) * state.zoom);
 
   state.autoExpandSession = {
@@ -2289,12 +2437,165 @@ function maybeExpandGridForDragHover(event) {
   }
 }
 
-function getPreviewSlotIndices() {
-  const indices = [];
-  for (let i = 0; i < state.grid.length; i += 1) {
-    if (state.grid[i]) indices.push(i);
+function getPreviewSpreadGroup(slotIndex) {
+  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= state.grid.length) return [];
+  if (!state.grid[slotIndex]) return [];
+
+  const row = Math.floor(slotIndex / state.cols);
+  let startCol = slotIndex % state.cols;
+  let endCol = startCol;
+
+  while (startCol > 0) {
+    const leftIndex = row * state.cols + (startCol - 1);
+    const currentIndex = row * state.cols + startCol;
+    if (getGapAfterColumn(startCol - 1) !== 0) break;
+    if (!state.grid[leftIndex] || !state.grid[currentIndex]) break;
+    startCol -= 1;
   }
-  return indices;
+
+  while (endCol < state.cols - 1) {
+    const currentIndex = row * state.cols + endCol;
+    const rightIndex = row * state.cols + (endCol + 1);
+    if (getGapAfterColumn(endCol) !== 0) break;
+    if (!state.grid[currentIndex] || !state.grid[rightIndex]) break;
+    endCol += 1;
+  }
+
+  const group = [];
+  for (let col = startCol; col <= endCol; col += 1) {
+    const idx = row * state.cols + col;
+    if (!state.grid[idx]) break;
+    group.push(idx);
+  }
+  return group;
+}
+
+function getPreviewSlotGroups() {
+  const groups = [];
+  for (let row = 0; row < state.rows; row += 1) {
+    for (let col = 0; col < state.cols;) {
+      const slotIndex = row * state.cols + col;
+      if (!state.grid[slotIndex]) {
+        col += 1;
+        continue;
+      }
+
+      const spreadGroup = getPreviewSpreadGroup(slotIndex);
+      if (spreadGroup.length > 1 && spreadGroup[0] === slotIndex) {
+        groups.push(spreadGroup);
+        col = (spreadGroup[spreadGroup.length - 1] % state.cols) + 1;
+      } else {
+        groups.push([slotIndex]);
+        col += 1;
+      }
+    }
+  }
+  return groups;
+}
+
+let previewRenderToken = 0;
+const PREVIEW_SPREAD_MAX_DIM = 8192;
+
+function getPreviewSpreadRenderScale(sortedSlots, metrics, { fullRes = false } = {}) {
+  if (!fullRes) return 1;
+
+  let desiredScale = 1;
+  for (const slotIndex of sortedSlots) {
+    const assetId = state.grid[slotIndex];
+    const asset = assetId ? findAssetById(assetId) : null;
+    if (!asset) continue;
+    const xScale = (asset.width || metrics.cellWidth) / Math.max(1, metrics.cellWidth);
+    const yScale = (asset.height || metrics.cellHeight) / Math.max(1, metrics.cellHeight);
+    desiredScale = Math.max(desiredScale, xScale, yScale);
+  }
+
+  const baseWidth = Math.max(1, (metrics.columnOffsets[sortedSlots[sortedSlots.length - 1] % state.cols] || 0)
+    - (metrics.columnOffsets[sortedSlots[0] % state.cols] || 0) + metrics.cellWidth);
+  const baseHeight = Math.max(1, metrics.cellHeight);
+  const maxBaseDim = Math.max(baseWidth, baseHeight);
+  const maxSafeScale = Math.max(1, PREVIEW_SPREAD_MAX_DIM / maxBaseDim);
+  return clamp(desiredScale, 1, maxSafeScale);
+}
+
+async function renderPreviewGroupDataUrl(slotIndices, { fullRes = false } = {}) {
+  const validSlots = slotIndices.filter(index => Number.isInteger(index) && state.grid[index]);
+  if (validSlots.length === 0) return null;
+
+  const metrics = getLayoutMetrics();
+  const sorted = validSlots.slice().sort((a, b) => a - b);
+  const firstCol = sorted[0] % state.cols;
+  const lastCol = sorted[sorted.length - 1] % state.cols;
+
+  const left = metrics.columnOffsets[firstCol] || 0;
+  const right = (metrics.columnOffsets[lastCol] || 0) + metrics.cellWidth;
+  const baseWidth = Math.max(1, right - left);
+  const baseHeight = Math.max(1, metrics.cellHeight);
+  const renderScale = getPreviewSpreadRenderScale(sorted, metrics, { fullRes });
+  const width = Math.max(1, Math.round(baseWidth * renderScale));
+  const height = Math.max(1, Math.round(baseHeight * renderScale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#f3f7fc';
+  ctx.fillRect(0, 0, width, height);
+
+  const assetIds = sorted.map(index => state.grid[index]).filter(Boolean);
+  const fullResUrls = fullRes ? await getFullResObjectUrls(assetIds) : null;
+
+  try {
+    for (const slotIndex of sorted) {
+      const assetId = state.grid[slotIndex];
+      const asset = assetId ? findAssetById(assetId) : null;
+      if (!asset) continue;
+
+      const col = slotIndex % state.cols;
+      const x = ((metrics.columnOffsets[col] || 0) - left) * renderScale;
+      const y = 0;
+      const scaledCellWidth = metrics.cellWidth * renderScale;
+      const scaledCellHeight = metrics.cellHeight * renderScale;
+      const src = fullRes
+        ? (fullResUrls.get(assetId) || asset.thumbUrl)
+        : asset.thumbUrl;
+      const image = fullRes ? await loadImageOnce(src) : await loadImage(src);
+      const rect = objectFitRect({ x, y, width: scaledCellWidth, height: scaledCellHeight }, image, state.fit);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, scaledCellWidth, scaledCellHeight);
+      ctx.clip();
+      ctx.drawImage(image, rect.x, rect.y, rect.width, rect.height);
+      ctx.restore();
+    }
+  } finally {
+    if (fullResUrls) {
+      for (const url of fullResUrls.values()) {
+        if (url) URL.revokeObjectURL(url);
+      }
+    }
+  }
+
+  return canvas.toDataURL('image/png');
+}
+
+async function getPreviewImageSource(slotIndices, { fullRes = false } = {}) {
+  const group = slotIndices.filter(index => Number.isInteger(index) && state.grid[index]);
+  if (group.length === 0) return { src: null, objectUrl: false };
+
+  if (group.length === 1) {
+    const assetId = state.grid[group[0]];
+    const asset = findAssetById(assetId);
+    if (!asset) return { src: null, objectUrl: false };
+    if (!fullRes) return { src: asset.thumbUrl, objectUrl: false };
+    const blob = await readAssetBlob(assetId);
+    if (!blob) return { src: asset.thumbUrl, objectUrl: false };
+    return { src: URL.createObjectURL(blob), objectUrl: true };
+  }
+
+  const src = await renderPreviewGroupDataUrl(group, { fullRes });
+  return { src, objectUrl: false };
 }
 
 // Object URL currently backing the full-resolution preview image, if any.
@@ -2312,6 +2613,7 @@ function releasePreviewObjectUrl() {
 function closePreviewModal() {
   state.previewModalOpen = false;
   state.previewSlotIndex = null;
+  previewRenderToken += 1;
   releasePreviewObjectUrl();
   els.previewModal.classList.remove('show');
   els.previewModal.setAttribute('aria-hidden', 'true');
@@ -2319,48 +2621,63 @@ function closePreviewModal() {
 
 async function syncPreviewModal() {
   if (!state.previewModalOpen) return;
-  const sequence = getPreviewSlotIndices();
-  if (sequence.length === 0) {
+  const groups = getPreviewSlotGroups();
+  if (groups.length === 0) {
     closePreviewModal();
     showToast('No images available to preview');
     return;
   }
 
-  let sequenceIndex = sequence.indexOf(state.previewSlotIndex ?? sequence[0]);
-  if (sequenceIndex < 0) sequenceIndex = 0;
-  state.previewSlotIndex = sequence[sequenceIndex];
-
-  const slotIndex = state.previewSlotIndex;
-  const assetId = state.grid[slotIndex];
-  const asset = assetId ? findAssetById(assetId) : null;
-  if (!asset) {
+  let groupIndex = groups.findIndex(group => group.includes(state.previewSlotIndex ?? group[0]));
+  if (groupIndex < 0) groupIndex = 0;
+  const group = groups[groupIndex];
+  if (!group || group.length === 0) {
     closePreviewModal();
     return;
   }
 
-  // Show the thumbnail immediately, then upgrade to full resolution (pulled
-  // from IndexedDB) once it's ready \u2014 avoids blocking the modal open on a
-  // potentially large IndexedDB read/decode.
-  releasePreviewObjectUrl();
-  els.previewModalImage.src = asset.thumbUrl;
-  els.previewModalImage.alt = asset.name;
-  els.previewModalTitle.textContent = asset.name;
-  const slotRow = Math.floor(slotIndex / state.cols) + 1;
-  const slotCol = (slotIndex % state.cols) + 1;
-  els.previewModalCaption.textContent = `Slot ${slotIndex + 1} of ${state.grid.length} (Row ${slotRow}, Column ${slotCol})`;
-  els.previewModalCounter.textContent = `${sequenceIndex + 1} / ${sequence.length}`;
-  els.previewPrevBtn.disabled = sequence.length <= 1;
-  els.previewNextBtn.disabled = sequence.length <= 1;
+  state.previewSlotIndex = group[0];
+  const slotIndex = group[0];
+  const firstAssetId = state.grid[slotIndex];
+  const firstAsset = firstAssetId ? findAssetById(firstAssetId) : null;
+  if (!firstAsset) {
+    closePreviewModal();
+    return;
+  }
+
+  const row = Math.floor(slotIndex / state.cols) + 1;
+  const firstCol = (group[0] % state.cols) + 1;
+  const lastCol = (group[group.length - 1] % state.cols) + 1;
+  const slotStart = group[0] + 1;
+  const slotEnd = group[group.length - 1] + 1;
+  const isSpread = group.length > 1;
+  els.previewModalTitle.textContent = isSpread ? `Spread preview (${group.length} images)` : firstAsset.name;
+  els.previewModalCaption.textContent = isSpread
+    ? `Slots ${slotStart}-${slotEnd} (Row ${row}, Columns ${firstCol}-${lastCol})`
+    : `Slot ${slotStart} of ${state.grid.length} (Row ${row}, Column ${firstCol})`;
+  els.previewModalCounter.textContent = `${groupIndex + 1} / ${groups.length}`;
+  els.previewPrevBtn.disabled = groups.length <= 1;
+  els.previewNextBtn.disabled = groups.length <= 1;
   els.previewModal.classList.add('show');
   els.previewModal.setAttribute('aria-hidden', 'false');
+  els.previewModalImage.alt = isSpread
+    ? `Spread preview for slots ${slotStart} through ${slotEnd}`
+    : firstAsset.name;
 
-  const blob = await readAssetBlob(assetId);
-  // Bail if the modal moved on (closed / different slot) while we were
-  // reading IndexedDB.
-  if (!blob || !state.previewModalOpen || state.previewSlotIndex !== slotIndex) return;
-  const objectUrl = URL.createObjectURL(blob);
-  previewObjectUrl = objectUrl;
-  els.previewModalImage.src = objectUrl;
+  const renderToken = ++previewRenderToken;
+  releasePreviewObjectUrl();
+
+  const thumbSource = await getPreviewImageSource(group, { fullRes: false });
+  if (!thumbSource.src || renderToken !== previewRenderToken || !state.previewModalOpen || state.previewSlotIndex !== slotIndex) return;
+  els.previewModalImage.src = thumbSource.src;
+
+  const fullResSource = await getPreviewImageSource(group, { fullRes: true });
+  if (!fullResSource.src || renderToken !== previewRenderToken || !state.previewModalOpen || state.previewSlotIndex !== slotIndex) return;
+  if (fullResSource.objectUrl) {
+    releasePreviewObjectUrl();
+    previewObjectUrl = fullResSource.src;
+  }
+  els.previewModalImage.src = fullResSource.src;
 }
 
 function openPreviewModal(slotIndex) {
@@ -2373,18 +2690,18 @@ function openPreviewModal(slotIndex) {
 
 function stepPreview(direction) {
   if (!state.previewModalOpen) return;
-  const sequence = getPreviewSlotIndices();
-  if (sequence.length === 0) return closePreviewModal();
-  const currentIndex = sequence.indexOf(state.previewSlotIndex ?? sequence[0]);
-  const nextIndex = (currentIndex < 0 ? 0 : currentIndex + direction + sequence.length) % sequence.length;
-  state.previewSlotIndex = sequence[nextIndex];
+  const groups = getPreviewSlotGroups();
+  if (groups.length === 0) return closePreviewModal();
+  const currentGroupIndex = groups.findIndex(group => group.includes(state.previewSlotIndex ?? group[0]));
+  const nextGroupIndex = (currentGroupIndex < 0 ? 0 : currentGroupIndex + direction + groups.length) % groups.length;
+  state.previewSlotIndex = groups[nextGroupIndex][0];
   syncPreviewModal();
 }
 
 function createGridEdgeButtons(metrics) {
   if (state.cols > 1) {
     for (let col = 0; col < state.cols; col += 1) {
-      const x = metrics.offsetX + col * (metrics.cellWidth + state.gapX) + metrics.cellWidth / 2;
+      const x = metrics.offsetX + metrics.columnOffsets[col] + metrics.cellWidth / 2;
       const colBtn = document.createElement('button');
       colBtn.type = 'button';
       colBtn.className = 'edge-remove-btn edge-remove-col';
@@ -2423,6 +2740,91 @@ function createGridEdgeButtons(metrics) {
   }
 }
 
+function fileFromClipboardData(dataTransfer) {
+  if (!dataTransfer) return null;
+
+  if (dataTransfer.files?.length) {
+    for (const file of dataTransfer.files) {
+      if (String(file.type || '').startsWith('image/')) return file;
+    }
+  }
+
+  if (dataTransfer.items?.length) {
+    for (const item of dataTransfer.items) {
+      if (item.kind === 'file' && String(item.type || '').startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) return file;
+      }
+    }
+  }
+
+  return null;
+}
+
+async function readClipboardImageFile() {
+  if (!navigator.clipboard?.read) {
+    throw new Error('Clipboard read API unavailable');
+  }
+
+  const clipboardItems = await navigator.clipboard.read();
+  for (const item of clipboardItems) {
+    const imageType = item.types.find(type => type.startsWith('image/'));
+    if (!imageType) continue;
+    const blob = await item.getType(imageType);
+    return new File([blob], `pasted-image.${extensionFromMime(imageType)}`, { type: imageType });
+  }
+  return null;
+}
+
+function extensionFromMime(mimeType) {
+  const map = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/svg+xml': 'svg',
+    'image/bmp': 'bmp',
+    'image/tiff': 'tiff'
+  };
+  return map[mimeType] || 'png';
+}
+
+async function handlePaste(targetIndex, pasteEvent = null) {
+  if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= state.grid.length) {
+    showToast('Select a valid slot before pasting');
+    return false;
+  }
+
+  try {
+    let file = null;
+    if (pasteEvent?.clipboardData) {
+      file = fileFromClipboardData(pasteEvent.clipboardData);
+    }
+    if (!file) {
+      file = await readClipboardImageFile();
+    }
+
+    if (!file) {
+      showToast('No image found in clipboard');
+      return false;
+    }
+
+    const asset = await fileToAsset(file);
+    pushHistory(`Paste image in slot ${targetIndex + 1}`);
+    state.assets.push(asset);
+    state.grid[targetIndex] = asset.id;
+    state.selectedSlotIndex = targetIndex;
+    state.multiSelectedSlots = [targetIndex];
+    await renderAll();
+    showToast(`Pasted image into slot ${targetIndex + 1}`);
+    return true;
+  } catch (err) {
+    console.error('Paste failed:', err);
+    showToast('Paste failed. Check clipboard permissions.');
+    return false;
+  }
+}
+
 function createGridCell(assetId, index, frame) {
   const cell = document.createElement('div');
   cell.className = 'grid-cell';
@@ -2436,6 +2838,13 @@ function createGridCell(assetId, index, frame) {
   }
   if (state.multiSelectedSlots.includes(index)) {
     cell.classList.add('multi-selected');
+  }
+  const col = index % state.cols;
+  if (getGapAfterColumn(col) === 0) {
+    cell.classList.add('spread-left');
+  }
+  if (col > 0 && getGapAfterColumn(col - 1) === 0) {
+    cell.classList.add('spread-right');
   }
   cell.style.left = `${frame.left}%`;
   cell.style.top = `${frame.top}%`;
@@ -2463,8 +2872,15 @@ function createGridCell(assetId, index, frame) {
   removeBtn.title = 'Clear cell';
   removeBtn.setAttribute('aria-label', 'Clear cell');
   removeBtn.disabled = !assetId;
+  const pasteBtn = document.createElement('button');
+  pasteBtn.type = 'button';
+  pasteBtn.className = 'paste-btn';
+  pasteBtn.textContent = '📋';
+  pasteBtn.title = 'Paste image from clipboard';
+  pasteBtn.setAttribute('aria-label', 'Paste image from clipboard');
   actions.appendChild(replaceBtn);
   actions.appendChild(removeBtn);
+  actions.appendChild(pasteBtn);
 
   if (assetId) {
     const asset = findAssetById(assetId);
@@ -2503,6 +2919,12 @@ function createGridCell(assetId, index, frame) {
 
   removeBtn.addEventListener('click', () => {
     clearGridSlot(index);
+  });
+
+  pasteBtn.addEventListener('click', async event => {
+    event.preventDefault();
+    event.stopPropagation();
+    await handlePaste(index);
   });
 
   cell.addEventListener('dragstart', () => {
@@ -2671,7 +3093,7 @@ function renderGrid() {
   for (let index = 0; index < state.grid.length; index += 1) {
     const row = Math.floor(index / state.cols);
     const col = index % state.cols;
-    const x = metrics.offsetX + col * (metrics.cellWidth + state.gapX);
+    const x = metrics.offsetX + metrics.columnOffsets[col];
     const y = metrics.offsetY + row * (metrics.cellHeight + state.gapY);
     const frame = {
       left: (x / metrics.width) * 100,
@@ -2712,7 +3134,7 @@ async function drawLayoutToCanvas(canvas, { fullRes = false } = {}) {
     for (let i = 0; i < state.grid.length; i += 1) {
       const row = Math.floor(i / state.cols);
       const col = i % state.cols;
-      const x = metrics.offsetX + col * (metrics.cellWidth + state.gapX);
+      const x = metrics.offsetX + metrics.columnOffsets[col];
       const y = metrics.offsetY + row * (metrics.cellHeight + state.gapY);
 
       ctx.fillStyle = '#f3f7fc';
@@ -2764,7 +3186,7 @@ async function buildSvgMarkup() {
   for (let i = 0; i < state.grid.length; i += 1) {
     const row = Math.floor(i / state.cols);
     const col = i % state.cols;
-    const x = metrics.offsetX + col * (metrics.cellWidth + state.gapX);
+    const x = metrics.offsetX + metrics.columnOffsets[col];
     const y = metrics.offsetY + row * (metrics.cellHeight + state.gapY);
     const clipId = `clip-${i}`;
 
@@ -2794,32 +3216,453 @@ async function buildSvgMarkup() {
   ].join('');
 }
 
-async function buildLucidContentPayload() {
-  const metrics = getLayoutMetrics();
+function inferLucidPageLabel(asset, fallbackSlotIndex) {
+  const name = String(asset?.name || '');
+  const explicit = name.match(/page[^0-9]*(\d{1,6})/i);
+  if (explicit) return `Page ${Number(explicit[1])}`;
+  const trailing = name.match(/(\d{1,6})(?!.*\d)/);
+  if (trailing) return `Page ${Number(trailing[1])}`;
+  return `Page ${Math.max(1, Number(fallbackSlotIndex) || 1)}`;
+}
 
+function getSpreadEndColForLucid(row, startCol) {
+  let endCol = startCol;
+  for (let col = startCol; col < state.cols - 1; col += 1) {
+    const leftIndex = row * state.cols + col;
+    const rightIndex = row * state.cols + (col + 1);
+    if (getGapAfterColumn(col) !== 0) break;
+    if (!state.grid[leftIndex] || !state.grid[rightIndex]) break;
+    endCol = col + 1;
+  }
+  return endCol;
+}
+
+function getLucidItemRenderScale(item) {
+  const maxDim = 7000;
+  let scale = 1;
+  for (const slot of item.slots) {
+    const asset = slot.asset;
+    if (!asset) continue;
+    const sx = (asset.width || slot.width) / Math.max(1, slot.width);
+    const sy = (asset.height || item.height) / Math.max(1, item.height);
+    scale = Math.max(scale, sx, sy);
+  }
+  const maxBase = Math.max(1, item.width, item.height);
+  const maxSafe = Math.max(1, maxDim / maxBase);
+  return clamp(scale, 1, maxSafe);
+}
+
+const LUCID_COPY_SINGLE_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const LUCID_COPY_SINGLE_IMAGE_MAX_DIMENSION = 4000;
+const LUCID_CLIPBOARD_MAX_DIM = LUCID_COPY_SINGLE_IMAGE_MAX_DIMENSION;
+const LUCID_CLIPBOARD_JPEG_QUALITY = 0.97;
+
+function mimeFromDataUrl(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return '';
+  const match = dataUrl.match(/^data:([^;,]+)[;,]/i);
+  return (match?.[1] || '').toLowerCase();
+}
+
+function canvasHasVisibleTransparency(canvasCtx, width, height) {
+  const sw = Math.min(64, Math.max(1, width));
+  const sh = Math.min(64, Math.max(1, height));
+  const sampleCanvas = document.createElement('canvas');
+  sampleCanvas.width = sw;
+  sampleCanvas.height = sh;
+  const sctx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+  sctx.drawImage(canvasCtx.canvas, 0, 0, sw, sh);
+  const { data } = sctx.getImageData(0, 0, sw, sh);
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] < 250) return true;
+  }
+  return false;
+}
+
+function dataUrlByteLength(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return 0;
+  const comma = dataUrl.indexOf(',');
+  if (comma < 0) return 0;
+  const b64 = dataUrl.slice(comma + 1).replace(/\s+/g, '');
+  const pad = b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0);
+  return Math.max(0, Math.floor((b64.length * 3) / 4) - pad);
+}
+
+function formatMb(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
+}
+
+function encodeCopyImageWithinLimits(canvas, { hasAlpha, contextLabel }) {
+  const width = canvas.width;
+  const height = canvas.height;
+  if (width > LUCID_COPY_SINGLE_IMAGE_MAX_DIMENSION || height > LUCID_COPY_SINGLE_IMAGE_MAX_DIMENSION) {
+    throw new Error(
+      `${contextLabel} is ${width}x${height}px, above Lucid's 4000x4000 pixel maximum. `
+      + 'Reduce image pixel dimensions and try again.'
+    );
+  }
+
+  if (hasAlpha) {
+    const png = canvas.toDataURL('image/png');
+    const pngBytes = dataUrlByteLength(png);
+    if (pngBytes <= LUCID_COPY_SINGLE_IMAGE_MAX_BYTES) return png;
+    throw new Error(
+      `${contextLabel} is ${formatMb(pngBytes)} as PNG, above Lucid's 10MB per-image maximum. `
+      + 'Reduce image pixel dimensions and try again.'
+    );
+  }
+
+  const qualityAttempts = [
+    LUCID_CLIPBOARD_JPEG_QUALITY,
+    0.92,
+    0.88,
+    0.84,
+    0.8,
+    0.76,
+    0.72,
+    0.68,
+    0.64,
+    0.6
+  ];
+  const attempted = new Set();
+  let smallest = null;
+
+  for (const quality of qualityAttempts) {
+    const q = clamp(Number(quality) || LUCID_CLIPBOARD_JPEG_QUALITY, 0.4, 1);
+    if (attempted.has(q)) continue;
+    attempted.add(q);
+    const jpeg = canvas.toDataURL('image/jpeg', q);
+    const bytes = dataUrlByteLength(jpeg);
+    if (!smallest || bytes < smallest.bytes) smallest = { jpeg, bytes };
+    if (bytes <= LUCID_COPY_SINGLE_IMAGE_MAX_BYTES) return jpeg;
+  }
+
+  throw new Error(
+    `${contextLabel} is ${formatMb(smallest?.bytes || 0)} after JPEG compression, above Lucid's 10MB per-image maximum. `
+    + 'Reduce image pixel dimensions and try again.'
+  );
+}
+
+function clampImageSize(width, height, maxDim = LUCID_CLIPBOARD_MAX_DIM, pixelScale = 100) {
+  const safeW = Math.max(1, Number(width) || 1);
+  const safeH = Math.max(1, Number(height) || 1);
+  const requestedScale = clamp(Number(pixelScale) || 100, 25, 200) / 100;
+  const scaledW = safeW * requestedScale;
+  const scaledH = safeH * requestedScale;
+  const hardLimitScale = Math.min(1, maxDim / Math.max(1, scaledW, scaledH));
+  return {
+    width: Math.max(1, Math.round(scaledW * hardLimitScale)),
+    height: Math.max(1, Math.round(scaledH * hardLimitScale))
+  };
+}
+
+async function buildLucidPreparedImageDataUrl(sourceUrl, fallbackWidth, fallbackHeight, pixelScale = 100) {
+  if (!sourceUrl) {
+    return {
+      url: null,
+      width: Math.max(1, Math.round(fallbackWidth || 1)),
+      height: Math.max(1, Math.round(fallbackHeight || 1))
+    };
+  }
+
+  const image = await loadImageOnce(sourceUrl);
+  const sourceW = image.naturalWidth || image.width || fallbackWidth || 1;
+  const sourceH = image.naturalHeight || image.height || fallbackHeight || 1;
+  const target = clampImageSize(sourceW, sourceH, LUCID_CLIPBOARD_MAX_DIM, pixelScale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = target.width;
+  canvas.height = target.height;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  const sourceMime = mimeFromDataUrl(sourceUrl);
+  if (sourceMime === 'image/jpeg' || sourceMime === 'image/jpg') {
+    // JPEG cannot carry transparency.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, target.width, target.height);
+  } else {
+    ctx.clearRect(0, 0, target.width, target.height);
+  }
+  ctx.drawImage(image, 0, 0, target.width, target.height);
+
+  const hasAlpha = canvasHasVisibleTransparency(ctx, target.width, target.height);
+  const contextLabel = 'Copied image';
+  const encoded = encodeCopyImageWithinLimits(canvas, { hasAlpha, contextLabel });
+
+  return {
+    // Enforce Lucid copy/paste max constraints at encode time.
+    url: encoded,
+    width: target.width,
+    height: target.height
+  };
+}
+
+async function buildLucidComposedItemDataUrl(item, pixelScale = 100) {
+  const images = [];
+  for (const slot of item.slots) {
+    if (!slot.url) continue;
+    const image = await loadImageOnce(slot.url);
+    images.push({ slot, image });
+  }
+  if (images.length === 0) {
+    return { url: null, width: item.width, height: item.height };
+  }
+
+  const targetHeight = Math.max(1, ...images.map(({ image }) => image.naturalHeight || image.height || 1));
+  const widths = images.map(({ image }) => {
+    const sourceW = image.naturalWidth || image.width || 1;
+    const sourceH = image.naturalHeight || image.height || 1;
+    return Math.max(1, Math.round(sourceW * (targetHeight / sourceH)));
+  });
+  const composedWidth = widths.reduce((sum, w) => sum + w, 0);
+  const composedHeight = targetHeight;
+  const target = clampImageSize(composedWidth, composedHeight, LUCID_CLIPBOARD_MAX_DIM, pixelScale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = target.width;
+  canvas.height = target.height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, target.width, target.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  let drawX = 0;
+  for (let i = 0; i < images.length; i += 1) {
+    const { image } = images[i];
+    const drawW = Math.max(1, Math.round(widths[i] * (target.width / composedWidth)));
+    ctx.drawImage(image, drawX, 0, drawW, target.height);
+    drawX += drawW;
+  }
+
+  const hasAlpha = canvasHasVisibleTransparency(ctx, target.width, target.height);
+  const encoded = encodeCopyImageWithinLimits(canvas, {
+    hasAlpha,
+    contextLabel: item.slots.length > 1 ? 'Copied spread image' : 'Copied image'
+  });
+
+  return {
+    // Enforce Lucid copy/paste max constraints at encode time.
+    url: encoded,
+    width: target.width,
+    height: target.height
+  };
+}
+
+async function buildLucidExportItemsForClipboard({
+  mergeLinkedSpreads = true,
+  imagePixelScale = 100,
+  onProgress = () => {}
+} = {}) {
+  const metrics = getLayoutMetrics();
+  const usedAssetIds = [...new Set(state.grid.filter(Boolean))];
+  const fullResUrls = await getFullResDataUrls(usedAssetIds);
+  const items = [];
+
+  for (let row = 0; row < state.rows; row += 1) {
+    for (let col = 0; col < state.cols;) {
+      const slotIndex = row * state.cols + col;
+      const assetId = state.grid[slotIndex];
+      if (!assetId) {
+        col += 1;
+        continue;
+      }
+
+      const endCol = mergeLinkedSpreads ? getSpreadEndColForLucid(row, col) : col;
+      const slots = [];
+      for (let c = col; c <= endCol; c += 1) {
+        const idx = row * state.cols + c;
+        const id = state.grid[idx];
+        if (!id) break;
+        const asset = findAssetById(id);
+        if (!asset) continue;
+        slots.push({
+          slotIndex: idx,
+          asset,
+          left: metrics.columnOffsets[c],
+          width: metrics.cellWidth,
+          url: fullResUrls.get(id) || asset.thumbUrl,
+          label: inferLucidPageLabel(asset, idx + 1)
+        });
+      }
+      if (slots.length === 0) {
+        col += 1;
+        continue;
+      }
+
+      const startCol = slots[0].slotIndex % state.cols;
+      const finalCol = slots[slots.length - 1].slotIndex % state.cols;
+      const x = metrics.columnOffsets[startCol];
+      const y = row * (metrics.cellHeight + state.gapY);
+      const width = (metrics.columnOffsets[finalCol] + metrics.cellWidth) - x;
+      const height = metrics.cellHeight;
+
+      items.push({
+        row,
+        startCol,
+        endCol: finalCol,
+        x,
+        y,
+        width,
+        height,
+        slots,
+        isSpread: slots.length > 1
+      });
+      col = finalCol + 1;
+    }
+  }
+
+  const prepared = [];
+  for (let i = 0; i < items.length; i += 1) {
+    const item = items[i];
+    onProgress(`Preparing Lucid copy ${i + 1} of ${items.length}…`);
+    if (!item.isSpread) {
+      const slot = item.slots[0];
+      const rendered = await buildLucidPreparedImageDataUrl(slot.url, slot.asset.width, slot.asset.height, imagePixelScale);
+      prepared.push({ ...item, renderedUrl: rendered.url, sourceWidth: rendered.width, sourceHeight: rendered.height });
+      continue;
+    }
+    const rendered = await buildLucidComposedItemDataUrl(item, imagePixelScale);
+    prepared.push({ ...item, renderedUrl: rendered.url, sourceWidth: rendered.width, sourceHeight: rendered.height });
+  }
+
+  return {
+    items: prepared,
+    width: metrics.width,
+    height: metrics.height
+  };
+}
+
+function createLucidLabelObject({ text, x, y, width, height, align = 'center', zOrder = 20, fontSize = 14 }) {
+  const id = lucidId();
+  const textValue = String(text || '');
+  const safeFontSize = clamp(Number(fontSize) || 14, 8, 72);
+  // Lucid text marks use an internal size unit where ~2.2222 equals 1px.
+  const lucidTextSize = safeFontSize * 2.2222222222222223;
+  const markEnd = Math.max(1, textValue.length);
+  const marks = [
+    { s: 0, n: 'c', v: '#000000ff', e: markEnd },
+    { s: 0, n: 's', v: lucidTextSize, e: markEnd }
+  ];
+  if (align === 'left' || align === 'right') {
+    marks.unshift({ s: 0, n: 'a', v: align });
+  }
+  return {
+    id,
+    IsBlock: true,
+    Action: {
+      Action: 'CreateBlock',
+      Class: 'DefaultTextBlockNew',
+      Properties: {
+        BG: 0,
+        DisabledFeatures: [],
+        Hidden: 0,
+        Opacity: 100,
+        Restrictions: { acap: false, scap: false },
+        RuleList: [],
+        ZOrder: zOrder,
+        BoundingBox: { x, y, w: width, h: height },
+        DataSyncStateIconPosition: null,
+        FillColor: '#FFFFFF',
+        FlipX: false,
+        FlipY: false,
+        GutterPadding: 5,
+        IgnoreTheme: {},
+        ImageFillProps: false,
+        InsetMargin: 5,
+        LineColor: '#000000',
+        LineWidth: 2,
+        NoteHint: '',
+        Rotation: 0,
+        Rounding: null,
+        StrokeStyle: 'solid',
+        TextAlign: align,
+        TRotation: 0,
+        TextVAlign: 'middle',
+        TextWrap: 'fit',
+        TraitsKeySourceCache: [],
+        TraitsLucidFieldToSourceCache: [],
+        DefaultTextStyle: (align === 'left' || align === 'right') ? { align } : {},
+        FixedWidth: false,
+        FixedHeight: false,
+        MaxWidth: 1000000,
+        GrowInAlignmentDirection: false,
+        Transparent: 0,
+        Text: { t: textValue, m: marks },
+        Text_DynamicFontSize: false,
+        Font: 'Inter',
+        Lock: 0
+      }
+    }
+  };
+}
+
+function buildLucidPlainTextFromItems(items) {
+  const rows = new Map();
+  for (const item of items) {
+    const rowItems = rows.get(item.row) || [];
+    rowItems.push(item);
+    rows.set(item.row, rowItems);
+  }
+
+  const rowKeys = [...rows.keys()].sort((a, b) => a - b);
+  const lines = [];
+  for (let r = 0; r < rowKeys.length; r += 1) {
+    const rowItems = rows.get(rowKeys[r]).slice().sort((a, b) => a.startCol - b.startCol);
+    for (const item of rowItems) {
+      if (item.slots.length <= 1) {
+        lines.push(item.slots[0]?.label || '');
+      } else {
+        const first = item.slots[0]?.label || '';
+        const last = item.slots[item.slots.length - 1]?.label || '';
+        lines.push(first);
+        lines.push(last);
+      }
+    }
+    if (r < rowKeys.length - 1) lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+async function buildLucidContentPayload(onProgress = () => {}) {
   const { loadLucidSettings } = window.__lucidExport || {};
   const lucidSettings = loadLucidSettings ? loadLucidSettings() : {};
   const imageScale = clamp(Number(lucidSettings.imageScale) || 100, 25, 400) / 100;
-  const scale = 10 * imageScale;
+  const imagePixelScale = clamp(Number(lucidSettings.imagePixelScale) || 100, 25, 200);
+  const labelTextSize = clamp(Number(lucidSettings.labelTextSize) || 14, 8, 72);
+  const mergeLinkedSpreads = lucidSettings.mergeLinkedSpreads !== false;
+  const includeOutline = lucidSettings.includeOutline !== false;
+  const includePageLabels = lucidSettings.includePageLabels === true;
+
+  onProgress('Preparing Lucid copy payload…');
+  const prepared = await buildLucidExportItemsForClipboard({
+    mergeLinkedSpreads,
+    imagePixelScale,
+    onProgress
+  });
+
+  // Keep the payload coordinate system stable and only scale block geometry.
+  // Scaling both geometry and payload Size together can normalize away the
+  // difference in Lucid paste, making 100% and 200% look identical.
+  const baseScale = 10;
+  const geometryScale = baseScale * imageScale;
   const base = { x: 10000, y: 1000 };
   const objects = [];
   const copiedItemIds = [];
   let zOrder = 20;
-  const fullResUrls = await getFullResDataUrls(state.grid.filter(Boolean));
+  const labelHeight = Math.max(28, Math.round(labelTextSize * 2.8 * imageScale));
+  const labelGap = Math.max(8, Math.round(labelTextSize * 0.65 * imageScale));
+  let maxBottom = 0;
 
-  for (let i = 0; i < state.grid.length; i += 1) {
-    const assetId = state.grid[i];
-    if (!assetId) continue;
-
-    const asset = findAssetById(assetId);
-    if (!asset) continue;
-
-    const row = Math.floor(i / state.cols);
-    const col = i % state.cols;
-    const x = metrics.offsetX + col * (metrics.cellWidth + state.gapX);
-    const y = metrics.offsetY + row * (metrics.cellHeight + state.gapY);
-    const fitRect = objectFitRect({ x, y, width: metrics.cellWidth, height: metrics.cellHeight }, { width: asset.width, height: asset.height }, 'contain');
-    const url = fullResUrls.get(assetId) || asset.thumbUrl;
+  onProgress('Building Lucid objects…');
+  for (const item of prepared.items) {
+    const sourceW = Math.max(1, item.sourceWidth || item.width);
+    const sourceH = Math.max(1, item.sourceHeight || item.height);
+    const boxW = item.width;
+    const boxH = boxW * (sourceH / sourceW);
+    const boxX = item.x;
+    const boxY = item.y;
 
     const id = lucidId();
     copiedItemIds.push(id);
@@ -2838,18 +3681,18 @@ async function buildLucidContentPayload() {
           Restrictions: { acap: false, scap: false },
           RuleList: [],
           ZOrder: zOrder,
-          AspectRatio: asset.width / Math.max(1, asset.height),
+          AspectRatio: sourceW / sourceH,
           BoundingBox: {
-            x: base.x + fitRect.x * scale,
-            y: base.y + fitRect.y * scale,
-            w: fitRect.width * scale,
-            h: fitRect.height * scale
+            x: base.x + boxX * geometryScale,
+            y: base.y + boxY * geometryScale,
+            w: boxW * geometryScale,
+            h: boxH * geometryScale
           },
           DataSyncStateIconPosition: null,
           DynamicFontSize: false,
           FillColor: {
             pos: 'fill',
-            url,
+            url: item.renderedUrl,
             polys: null
           },
           FlipX: false,
@@ -2858,15 +3701,15 @@ async function buildLucidContentPayload() {
           IgnoreTheme: {},
           ImageFillProps: {
             polys: [[{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }]],
-            size: { width: asset.width, height: asset.height },
-            url
+            size: { width: sourceW, height: sourceH },
+            url: item.renderedUrl
           },
           InsetMargin: 0,
           LineColor: '#000000ff',
-          LineWidth: 0,
+          LineWidth: includeOutline ? 1 : 0,
           NoteHint: '',
           Rotation: 0,
-          Rounding: 0,
+          Rounding: includeOutline ? 12 : 0,
           StrokeStyle: 'solid',
           StylePresetId: 'ss_presetShapeStyle1',
           TextAlign: 'center',
@@ -2880,61 +3723,102 @@ async function buildLucidContentPayload() {
     });
 
     zOrder += 1;
-  }
 
+    if (includePageLabels) {
+      const leftX = base.x + boxX * geometryScale;
+      const labelY = base.y + (boxY * geometryScale) + (boxH * geometryScale) + labelGap;
+      if (item.slots.length === 1) {
+        const labelObj = createLucidLabelObject({
+          text: item.slots[0].label,
+          x: leftX,
+          y: labelY,
+          width: boxW * geometryScale,
+          height: labelHeight,
+          align: 'center',
+          zOrder: zOrder + 1,
+          fontSize: labelTextSize
+        });
+        objects.push(labelObj);
+        copiedItemIds.push(labelObj.id);
+        zOrder += 1;
+      } else {
+        const first = item.slots[0];
+        const last = item.slots[item.slots.length - 1];
+        const leftLabel = createLucidLabelObject({
+          text: first.label,
+          x: leftX,
+          y: labelY,
+          width: (boxW * geometryScale) / 2,
+          height: labelHeight,
+          align: 'left',
+          zOrder: zOrder + 1,
+          fontSize: labelTextSize
+        });
+        const rightLabel = createLucidLabelObject({
+          text: last.label,
+          x: leftX + ((boxW * geometryScale) / 2),
+          y: labelY,
+          width: (boxW * geometryScale) / 2,
+          height: labelHeight,
+          align: 'right',
+          zOrder: zOrder + 2,
+          fontSize: labelTextSize
+        });
+        objects.push(leftLabel, rightLabel);
+        copiedItemIds.push(leftLabel.id, rightLabel.id);
+        zOrder += 2;
+      }
+    }
+
+    const itemBottom = (boxY * geometryScale) + (boxH * geometryScale) + (includePageLabels ? (labelHeight + labelGap + 4) : 0);
+    if (itemBottom > maxBottom) maxBottom = itemBottom;
+  }
   const size = {
-    w: metrics.width * scale,
-    h: metrics.height * scale
+    w: prepared.width * baseScale,
+    h: Math.max(prepared.height * baseScale, maxBottom)
   };
 
-  return {
+  const contentPayload = {
     Objects: objects,
     Base: { ...base },
-    Page: '0_0',
-    Elements: {
-      ss_presetShapeStyle1: {
-        id: 'ss_presetShapeStyle1',
-        Type: 'ShapeStylePreset',
-        Properties: {
-          Order: 1,
-          Name: '',
-          BlockFillColor: '#ffffffff',
-          BlockLineColor: '#3a414aff',
-          BlockLineWidth: 2,
-          BlockStrokeStyle: 'solid'
-        }
-      }
-    },
+    Page: 'page1',
+    Elements: {},
     Pages: {},
     Size: size,
-    Plugins: ['/js/plugins/v2/userimage.js'],
+    Plugins: ['/js/plugins/v2/default.js', '/js/plugins/v2/userimage.js'],
     Document: lucidId(),
     Panel: '',
     PanelOffset: { x: 0, y: 0 },
-    BCUVersion: 151,
+    BCUVersion: 157,
     CopiedItemIds: copiedItemIds
+  };
+
+  return {
+    contentPayload,
+    preparedItems: prepared.items
   };
 }
 
-async function buildLucidHtmlPayload() {
-  const payload = await buildLucidContentPayload();
-  const payloadJson = JSON.stringify(payload);
+async function buildLucidHtmlPayload(onProgress = () => {}) {
+  const payloadResult = await buildLucidContentPayload(onProgress);
+  const payloadJson = JSON.stringify(payloadResult.contentPayload);
   const escapedPayload = escapeHtmlAttr(payloadJson);
-  await renderPreview();
-  const previewUrl = els.previewCanvas.toDataURL('image/png');
+  const plainText = buildLucidPlainTextFromItems(payloadResult.preparedItems || []);
 
   const html = [
     '<html>',
     '<body>',
     '<!--StartFragment-->',
     `<span data-lucid-type="application/vnd.lucid.chart.objects" data-lucid-content="${escapedPayload}"> </span>`,
-    previewUrl ? `<img src="${previewUrl}">` : '',
     '<!--EndFragment-->',
     '</body>',
     '</html>'
   ].join('');
 
-  return html;
+  return {
+    html,
+    plainText: plainText || 'PNG Grid Lucid payload copied.'
+  };
 }
 
 async function canvasToPngBlob() {
@@ -2956,31 +3840,66 @@ async function copyPreviewPng() {
 
 async function copyLucidchartAsset() {
   try {
-    const lucidHtml = await buildLucidHtmlPayload();
+    const COPY_PROGRESS_TOAST_MS = 60000;
+    const progress = (() => {
+      let lastAt = 0;
+      let lastMessage = '';
+      return message => {
+        const now = Date.now();
+        if (message !== lastMessage || now - lastAt > 450) {
+          showToast(message, COPY_PROGRESS_TOAST_MS);
+          lastMessage = message;
+          lastAt = now;
+        }
+      };
+    })();
+    progress('Preparing Lucid copy…');
+    const lucidPayload = await buildLucidHtmlPayload(progress);
+    const lucidHtml = lucidPayload.html;
+    const plainText = lucidPayload.plainText;
+    if (!lucidHtml || lucidHtml.length < 80) {
+      throw new Error('Lucid HTML payload was empty.');
+    }
+    console.info('[copy-lucid] writing html payload', {
+      htmlLength: lucidHtml.length,
+      plainTextLength: plainText.length
+    });
+    const primaryItemData = {
+      'text/html': new Blob([lucidHtml], { type: 'text/html' }),
+      'text/plain': new Blob([plainText], { type: 'text/plain' })
+    };
+    progress('Copying to clipboard…');
     await navigator.clipboard.write([
-      new ClipboardItem({
-        'text/html': new Blob([lucidHtml], { type: 'text/html' })
-      })
+      new ClipboardItem(primaryItemData)
     ]);
     showToast('Copied Lucid payload (HTML). Paste with Ctrl+V.');
     return;
-  } catch {
+  } catch (primaryError) {
+    console.error('[copy-lucid] primary HTML payload write failed', primaryError);
     try {
       const svgMarkup = await buildSvgMarkup();
+      const plainText = 'PNG Grid fallback payload copied. If Lucid paste fails, try Copy preview PNG.';
       const svgBlob = new Blob([svgMarkup], { type: 'image/svg+xml' });
       await navigator.clipboard.write([
         new ClipboardItem({
+          'text/plain': new Blob([plainText], { type: 'text/plain' }),
+          'text/html': new Blob(['<html><body><!--StartFragment--><p>PNG Grid SVG fallback copied.</p><!--EndFragment--></body></html>'], { type: 'text/html' }),
           'image/svg+xml': svgBlob
         })
       ]);
       showToast('Lucid HTML blocked; copied SVG fallback.');
-    } catch {
+    } catch (svgError) {
+      console.error('[copy-lucid] SVG fallback write failed', svgError);
       const pngBlob = await canvasToPngBlob();
       if (!pngBlob) {
         showToast('Lucid copy failed');
         return;
       }
-      await navigator.clipboard.write([new ClipboardItem({ [pngBlob.type]: pngBlob })]);
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/plain': new Blob(['PNG Grid fallback PNG copied.'], { type: 'text/plain' }),
+        'text/html': new Blob(['<html><body><!--StartFragment--><p>PNG Grid PNG fallback copied.</p><!--EndFragment--></body></html>'], { type: 'text/html' }),
+        [pngBlob.type]: pngBlob
+      })]);
       showToast('Clipboard fell back to static PNG.');
     }
   }
@@ -3057,7 +3976,9 @@ function clearGrid() {
   state.assets = [];
   state.rows = 3;
   state.cols = 3;
+  state.globalGapX = 12;
   state.gapX = 12;
+  state.columnGaps = [12, 12];
   state.gapY = 12;
   state.selectedSlotIndex = null;
   state.pendingImportFiles = null;
@@ -3081,12 +4002,17 @@ function clearGrid() {
 function applyNumberSettings() {
   const prevRows = state.rows;
   const prevCols = state.cols;
-  const prevGapX = state.gapX;
+  const prevGlobalGapX = state.globalGapX;
   const prevGapY = state.gapY;
   const prevCellWidth = state.cellWidth;
   const prevCellHeight = state.cellHeight;
 
-  state.gapX = clamp(Number(els.gapXInput.value || 0), 0, 120);
+  state.globalGapX = clamp(Number(els.gapXInput.value || 0), 0, 120);
+  state.gapX = state.globalGapX;
+  if (state.globalGapX !== prevGlobalGapX) {
+    state.columnGaps = state.columnGaps.map(gap => (gap === 0 ? 0 : state.globalGapX));
+  }
+  normalizeColumnGaps();
   state.gapY = clamp(Number(els.gapYInput.value || 0), 0, 120);
   state.cellWidth = clamp(Number(els.cellWidthInput.value || 160), 40, 500);
   state.cellHeight = clamp(Number(els.cellHeightInput.value || 120), 40, 500);
@@ -3117,7 +4043,7 @@ function applyNumberSettings() {
   const changed =
     prevRows !== nextRows ||
     prevCols !== nextCols ||
-    prevGapX !== state.gapX ||
+    prevGlobalGapX !== state.globalGapX ||
     prevGapY !== state.gapY ||
     prevCellWidth !== state.cellWidth ||
     prevCellHeight !== state.cellHeight;
@@ -3126,7 +4052,9 @@ function applyNumberSettings() {
     pushHistory('Manual layout settings change');
   }
 
-  const overflowIds = resizeGridPreserve(nextRows, nextCols);
+  const overflowIds = resizeGridPreserve(nextRows, nextCols, {
+    preserveLeadingGaps: state.shrinkMode === 'reflow'
+  });
 
   if (overflowIds.length > 0) {
     pushAssetsToHolding(overflowIds);
@@ -4624,6 +5552,32 @@ function bindEvents() {
     if (!(target instanceof Element)) return;
     if (target.closest('.menu-wrap')) return;
     closeTopMenus();
+
+    if (target.closest('.grid-cell') || target.closest('.holding-tile')) {
+      return;
+    }
+    clearGridSelection();
+  });
+
+  els.gapControlsContainer?.addEventListener('click', event => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest('button[data-gap-index]');
+    if (!button) return;
+
+    const gapIndex = Number(button.dataset.gapIndex);
+    if (!Number.isInteger(gapIndex) || gapIndex < 0 || gapIndex >= state.columnGaps.length) return;
+    const wasLinked = getGapAfterColumn(gapIndex) === 0;
+    pushHistory(`${wasLinked ? 'Unlink' : 'Link'} columns ${gapIndex + 1}-${gapIndex + 2}`);
+    state.columnGaps[gapIndex] = wasLinked ? state.globalGapX : 0;
+    renderAll();
+  });
+
+  window.addEventListener('paste', async event => {
+    if (state.selectedSlotIndex == null) return;
+    if (isEditableElement(event.target)) return;
+    event.preventDefault();
+    await handlePaste(state.selectedSlotIndex, event);
   });
 
   document.addEventListener('keydown', event => {
@@ -4875,12 +5829,20 @@ function bindEvents() {
       el.addEventListener('input', () => {
         updateSizeLabel(input, label);
         // Update state immediately for visual feedback
-        state[stateKey] = Number(el.value);
+        if (stateKey === 'gapX') {
+          state.globalGapX = Number(el.value);
+          state.gapX = state.globalGapX;
+          state.columnGaps = state.columnGaps.map(gap => (gap === 0 ? 0 : state.globalGapX));
+          normalizeColumnGaps();
+        } else {
+          state[stateKey] = Number(el.value);
+        }
         renderAll();
         // Debounce history push to avoid too many entries while dragging slider
         clearTimeout(changeTimeout);
         changeTimeout = setTimeout(() => {
-          pushHistory(`Change ${stateKey} to ${el.value}`);
+          const labelKey = stateKey === 'gapX' ? 'globalGapX' : stateKey;
+          pushHistory(`Change ${labelKey} to ${el.value}`);
         }, 500);
       });
       updateSizeLabel(input, label);
@@ -5093,7 +6055,19 @@ function bindEvents() {
 
     els.lucidSendConfirmBtn.disabled = true;
     const originalLabel = els.lucidSendConfirmBtn.textContent;
-    const setLabel = (t) => { if (els.lucidSendConfirmBtn) els.lucidSendConfirmBtn.textContent = t; };
+    const setLabel = (() => {
+      let lastAt = 0;
+      let lastMessage = '';
+      return t => {
+        if (els.lucidSendConfirmBtn) els.lucidSendConfirmBtn.textContent = t;
+        const now = Date.now();
+        if (t !== lastMessage || now - lastAt > 450) {
+          showToast(t, 1400);
+          lastMessage = t;
+          lastAt = now;
+        }
+      };
+    })();
 
     try {
       setLabel('Preparing images…');
@@ -5114,7 +6088,8 @@ function bindEvents() {
           cols: state.cols,
           cellWidth: state.cellWidth,
           cellHeight: state.cellHeight,
-          gapX: state.gapX,
+          gapX: state.globalGapX,
+          columnGaps: state.columnGaps.slice(),
           gapY: state.gapY,
           assets: assetsForExport
         },
@@ -5124,7 +6099,12 @@ function bindEvents() {
           product: settings.product || 'lucidchart',
           parentFolderId,
           imageScale: clamp(Number(settings.imageScale) || 100, 25, 400) / 100,
+          imagePixelScale: clamp(Number(settings.imagePixelScale) || 100, 25, 200),
+          labelTextSize: clamp(Number(settings.labelTextSize) || 14, 8, 72),
           compressImages: settings.compressImages !== false,
+          mergeLinkedSpreads: settings.mergeLinkedSpreads !== false,
+          includeOutline: settings.includeOutline !== false,
+          includePageLabels: settings.includePageLabels === true,
           compressionLevel: settings.compressionLevel || 'balanced',
           compressionFormat: settings.compressionFormat || 'auto',
           customQuality: settings.customQuality,
@@ -5152,20 +6132,29 @@ function bindEvents() {
   }
 
   els.lucidCompressionLevelSelect?.addEventListener('change', updateCustomCompressionVisibility);
-  els.lucidCustomQualityInput?.addEventListener('input', () => {
-    if (els.lucidCustomQualityValue) els.lucidCustomQualityValue.textContent = els.lucidCustomQualityInput.value;
-  });
+
+  function normalizeNumericInput(el, min, max, fallback, step = null) {
+    if (!el) return fallback;
+    let value = clamp(Number(el.value) || fallback, min, max);
+    if (Number.isFinite(step) && step > 0) {
+      value = Math.round(value / step) * step;
+      value = clamp(value, min, max);
+    }
+    el.value = String(value);
+    return value;
+  }
 
   // UI scale is a display preference, not a Lucid export setting — apply and
-  // persist it immediately as the slider moves, independent of the modal's
-  // Save/Cancel buttons (which only govern the Lucid API fields below it).
-  els.uiScaleInput?.addEventListener('input', () => {
-    const pct = clamp(Number(els.uiScaleInput.value) || 100, UI_SCALE_MIN * 100, UI_SCALE_MAX * 100);
-    if (els.uiScaleValue) els.uiScaleValue.textContent = String(pct);
+  // persist it immediately as the numeric value changes, independent of the
+  // modal's Save/Cancel buttons (which only govern Lucid API settings).
+  const applyUiScaleInput = () => {
+    const pct = normalizeNumericInput(els.uiScaleInput, UI_SCALE_MIN * 100, UI_SCALE_MAX * 100, 100, 5);
     state.uiScalePreference = pct / 100;
     saveUiScalePreference(state.uiScalePreference);
     updateViewportLayout();
-  });
+  };
+  els.uiScaleInput?.addEventListener('input', applyUiScaleInput);
+  els.uiScaleInput?.addEventListener('change', applyUiScaleInput);
 
   function openLucidSettings() {
     closeTopMenus();
@@ -5173,18 +6162,22 @@ function bindEvents() {
     const settings = loadLucidSettings ? loadLucidSettings() : {};
     const uiScalePct = Math.round(state.uiScalePreference * 100);
     if (els.uiScaleInput) els.uiScaleInput.value = uiScalePct;
-    if (els.uiScaleValue) els.uiScaleValue.textContent = String(uiScalePct);
     if (els.lucidApiKeyInput) els.lucidApiKeyInput.value = settings.apiKey || '';
     if (els.lucidDocTitleInput) els.lucidDocTitleInput.value = settings.title || '';
     if (els.lucidProductSelect) els.lucidProductSelect.value = settings.product || 'lucidchart';
     const imageScalePct = clamp(Number(settings.imageScale) || 100, 25, 400);
     if (els.lucidImageScaleInput) els.lucidImageScaleInput.value = imageScalePct;
-    if (els.lucidImageScaleValue) els.lucidImageScaleValue.textContent = String(imageScalePct);
+    const imagePixelScalePct = clamp(Number(settings.imagePixelScale) || 100, 25, 200);
+    if (els.lucidImagePixelScaleInput) els.lucidImagePixelScaleInput.value = imagePixelScalePct;
+    const lucidLabelTextSize = clamp(Number(settings.labelTextSize) || 14, 8, 72);
+    if (els.lucidLabelTextSizeInput) els.lucidLabelTextSizeInput.value = lucidLabelTextSize;
     if (els.lucidCompressImagesInput) els.lucidCompressImagesInput.checked = settings.compressImages !== false;
+    if (els.lucidMergeSpreadsInput) els.lucidMergeSpreadsInput.checked = settings.mergeLinkedSpreads !== false;
+    if (els.lucidIncludeOutlineInput) els.lucidIncludeOutlineInput.checked = settings.includeOutline !== false;
+    if (els.lucidIncludePageLabelsInput) els.lucidIncludePageLabelsInput.checked = settings.includePageLabels === true;
     if (els.lucidCompressionFormatSelect) els.lucidCompressionFormatSelect.value = settings.compressionFormat || 'auto';
     if (els.lucidCompressionLevelSelect) els.lucidCompressionLevelSelect.value = settings.compressionLevel || 'balanced';
     if (els.lucidCustomQualityInput) els.lucidCustomQualityInput.value = settings.customQuality ?? 80;
-    if (els.lucidCustomQualityValue) els.lucidCustomQualityValue.textContent = String(settings.customQuality ?? 80);
     if (els.lucidCustomMaxDimensionInput) els.lucidCustomMaxDimensionInput.value = settings.customMaxDimension ?? 1800;
     updateCustomCompressionVisibility();
     els.lucidSettingsModal?.classList.add('show');
@@ -5199,9 +6192,19 @@ function bindEvents() {
 
   els.lucidSettingsBtn?.addEventListener('click', () => openLucidSettings());
 
-  els.lucidImageScaleInput?.addEventListener('input', () => {
-    if (els.lucidImageScaleValue) els.lucidImageScaleValue.textContent = els.lucidImageScaleInput.value;
-  });
+  const normalizeLucidSettingsNumbers = () => {
+    normalizeNumericInput(els.lucidImageScaleInput, 25, 400, 100, 5);
+    normalizeNumericInput(els.lucidImagePixelScaleInput, 25, 200, 100, 5);
+    normalizeNumericInput(els.lucidLabelTextSizeInput, 8, 72, 14, 1);
+    normalizeNumericInput(els.lucidCustomQualityInput, 1, 100, 80, 1);
+    normalizeNumericInput(els.lucidCustomMaxDimensionInput, 200, 4000, 1800, 50);
+  };
+
+  els.lucidImageScaleInput?.addEventListener('change', normalizeLucidSettingsNumbers);
+  els.lucidImagePixelScaleInput?.addEventListener('change', normalizeLucidSettingsNumbers);
+  els.lucidLabelTextSizeInput?.addEventListener('change', normalizeLucidSettingsNumbers);
+  els.lucidCustomQualityInput?.addEventListener('change', normalizeLucidSettingsNumbers);
+  els.lucidCustomMaxDimensionInput?.addEventListener('change', normalizeLucidSettingsNumbers);
 
   els.lucidSettingsCancelBtn?.addEventListener('click', closeLucidSettings);
 
@@ -5215,8 +6218,14 @@ function bindEvents() {
     const apiKey = els.lucidApiKeyInput?.value.trim() || '';
     const title = els.lucidDocTitleInput?.value.trim() || '';
     const product = els.lucidProductSelect?.value || 'lucidchart';
+    normalizeLucidSettingsNumbers();
     const imageScale = clamp(Number(els.lucidImageScaleInput?.value) || 100, 25, 400);
+    const imagePixelScale = clamp(Number(els.lucidImagePixelScaleInput?.value) || 100, 25, 200);
+    const labelTextSize = clamp(Number(els.lucidLabelTextSizeInput?.value) || 14, 8, 72);
     const compressImages = els.lucidCompressImagesInput ? els.lucidCompressImagesInput.checked : true;
+    const mergeLinkedSpreads = els.lucidMergeSpreadsInput ? els.lucidMergeSpreadsInput.checked : true;
+    const includeOutline = els.lucidIncludeOutlineInput ? els.lucidIncludeOutlineInput.checked : true;
+    const includePageLabels = els.lucidIncludePageLabelsInput ? els.lucidIncludePageLabelsInput.checked : false;
     const compressionFormat = els.lucidCompressionFormatSelect?.value || 'auto';
     const compressionLevel = els.lucidCompressionLevelSelect?.value || 'balanced';
     const customQuality = clamp(Number(els.lucidCustomQualityInput?.value) || 80, 1, 100);
@@ -5226,7 +6235,22 @@ function bindEvents() {
       els.lucidApiKeyInput?.focus();
       return;
     }
-    saveLucidSettings({ apiKey, title, product, imageScale, compressImages, compressionFormat, compressionLevel, customQuality, customMaxDimension });
+    saveLucidSettings({
+      apiKey,
+      title,
+      product,
+      imageScale,
+      imagePixelScale,
+      labelTextSize,
+      compressImages,
+      mergeLinkedSpreads,
+      includeOutline,
+      includePageLabels,
+      compressionFormat,
+      compressionLevel,
+      customQuality,
+      customMaxDimension
+    });
     closeLucidSettings();
     showToast('Lucid API settings saved.');
   });
@@ -5413,9 +6437,11 @@ function renderExportLog() {
 
 async function renderAll() {
   normalizeGridReferences();
+  normalizeColumnGaps();
   renderHoldingTray();
   state.fit = 'contain';
   syncSettingsInputs();
+  renderGapControls();
   renderGrid();
   updateStatChips();
   persistSession();
@@ -5439,6 +6465,7 @@ function initElements() {
   els.rowsInput = document.getElementById('rowsInput');
   els.colsInput = document.getElementById('colsInput');
   els.shrinkModeSelect = document.getElementById('shrinkModeSelect');
+  els.gapControlsContainer = document.getElementById('gapControlsContainer');
   els.gapXInput = document.getElementById('gapXInput');
   els.gapYInput = document.getElementById('gapYInput');
   els.fitModeInput = document.getElementById('fitModeInput');
@@ -5593,7 +6620,14 @@ function initElements() {
   els.lucidProductSelect = document.getElementById('lucidProductSelect');
   els.lucidImageScaleInput = document.getElementById('lucidImageScaleInput');
   els.lucidImageScaleValue = document.getElementById('lucidImageScaleValue');
+  els.lucidImagePixelScaleInput = document.getElementById('lucidImagePixelScaleInput');
+  els.lucidImagePixelScaleValue = document.getElementById('lucidImagePixelScaleValue');
+  els.lucidLabelTextSizeInput = document.getElementById('lucidLabelTextSizeInput');
+  els.lucidLabelTextSizeValue = document.getElementById('lucidLabelTextSizeValue');
   els.lucidCompressImagesInput = document.getElementById('lucidCompressImagesInput');
+  els.lucidMergeSpreadsInput = document.getElementById('lucidMergeSpreadsInput');
+  els.lucidIncludeOutlineInput = document.getElementById('lucidIncludeOutlineInput');
+  els.lucidIncludePageLabelsInput = document.getElementById('lucidIncludePageLabelsInput');
   els.lucidCompressionFormatSelect = document.getElementById('lucidCompressionFormatSelect');
   els.lucidCompressionLevelSelect = document.getElementById('lucidCompressionLevelSelect');
   els.lucidCustomCompressionFields = document.getElementById('lucidCustomCompressionFields');

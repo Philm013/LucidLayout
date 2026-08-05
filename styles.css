@@ -775,6 +775,16 @@ input[type="number"]::-webkit-inner-spin-button {
   cursor: pointer;
 }
 
+.grid-cell.spread-left {
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.grid-cell.spread-right {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
 .grid-cell img {
   width: 100%;
   height: 100%;
@@ -785,6 +795,11 @@ input[type="number"]::-webkit-inner-spin-button {
 .grid-cell-image {
   width: 100%;
   height: calc(100% - 24px);
+  object-fit: cover;
+}
+
+.grid-cell.spread-left .grid-cell-image,
+.grid-cell.spread-right .grid-cell-image {
   object-fit: cover;
 }
 
@@ -964,6 +979,35 @@ input[type="number"]::-webkit-inner-spin-button {
   line-height: 1;
 }
 
+.cell-actions .paste-btn {
+  font-size: 13px;
+}
+
+.gap-controls-wrap {
+  display: grid;
+  gap: calc(6px * var(--ui-scale));
+}
+
+.gap-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(6px * var(--ui-scale));
+}
+
+.spread-toggle-btn {
+  font-size: calc(12px * var(--ui-scale));
+  padding: calc(6px * var(--ui-scale)) calc(10px * var(--ui-scale));
+}
+
+.spread-toggle-btn.linked {
+  border-color: rgba(134, 242, 190, 0.8);
+  background: rgba(134, 242, 190, 0.16);
+}
+
+.gap-controls-empty {
+  margin: 0;
+}
+
 .grid-cell:hover .cell-actions,
 .grid-cell:focus-within .cell-actions {
   opacity: 1;
@@ -1124,6 +1168,33 @@ input[type="number"]::-webkit-inner-spin-button {
   padding: calc(14px * var(--ui-scale));
   display: grid;
   gap: calc(10px * var(--ui-scale));
+}
+
+.settings-modal-card {
+  width: min(920px, 100%);
+  max-height: min(92vh, 980px);
+  overflow: auto;
+  padding: calc(16px * var(--ui-scale));
+  gap: calc(12px * var(--ui-scale));
+}
+
+.settings-section {
+  display: grid;
+  gap: calc(10px * var(--ui-scale));
+  border: 1px solid rgba(166, 197, 255, 0.16);
+  border-radius: calc(12px * var(--ui-scale));
+  background: rgba(13, 26, 44, 0.34);
+  padding: calc(12px * var(--ui-scale));
+}
+
+.settings-section .modal-section-heading {
+  border-top: none;
+  padding-top: 0;
+}
+
+.settings-grid {
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  align-items: start;
 }
 
 .preview-modal-card {
@@ -1461,6 +1532,16 @@ input[type="number"]::-webkit-inner-spin-button {
   }
 
   .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-modal-card {
+    width: 100%;
+    max-height: 94vh;
+    padding: calc(12px * var(--ui-scale));
+  }
+
+  .settings-grid {
     grid-template-columns: 1fr;
   }
 
