@@ -50,6 +50,10 @@
             <label><span>Vertical Gap <span id="gapYLabel" class="size-label">medium</span></span><input id="gapYInput" type="range" min="0" max="40" value="12" class="slider"></label>
             <label><span>Cell Width <span id="cellWidthLabel" class="size-label">medium</span></span><input id="cellWidthInput" type="range" min="40" max="300" value="160" class="slider"></label>
             <label><span>Cell Height <span id="cellHeightLabel" class="size-label">medium</span></span><input id="cellHeightInput" type="range" min="40" max="300" value="120" class="slider"></label>
+            <div class="field-span-2 gap-controls-wrap">
+              <span>Column spread links</span>
+              <div id="gapControlsContainer" class="gap-controls" aria-label="Toggle linked column spreads"></div>
+            </div>
             <label class="field-span-2">
               <span>When shrinking rows/columns</span>
               <select id="shrinkModeSelect">
@@ -408,18 +412,24 @@
 
   <!-- Lucid settings modal -->
   <div id="lucidSettingsModal" class="modal-backdrop" aria-hidden="true">
-    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="lucidSettingsTitle">
+    <div class="modal-card settings-modal-card" role="dialog" aria-modal="true" aria-labelledby="lucidSettingsTitle">
       <h3 id="lucidSettingsTitle">Settings</h3>
-      <div class="field-grid">
-        <label class="field-span-2">
-          <span>Interface size (<span id="uiScaleValue">100</span>%)</span>
-          <input id="uiScaleInput" type="range" min="75" max="150" step="5" value="100" class="slider">
-        </label>
-        <p class="hint field-span-2">Scales the whole app's text, buttons, and panels larger or smaller. Applied immediately and remembered on this device.</p>
-      </div>
-      <h4 class="modal-section-heading">Lucid API</h4>
-      <p class="hint">Your API key is stored locally in this browser (localStorage) and sent directly from this page to Lucid's API — no server-side proxy is used.</p>
-      <div class="field-grid">
+
+      <section class="settings-section">
+        <h4 class="modal-section-heading">Interface</h4>
+        <div class="field-grid settings-grid">
+          <label>
+            <span>Interface size (%)</span>
+            <input id="uiScaleInput" type="number" min="75" max="150" step="5" value="100" inputmode="numeric">
+          </label>
+        </div>
+        <p class="hint">Scales the whole app's text, buttons, and panels larger or smaller. Applied immediately and remembered on this device.</p>
+      </section>
+
+      <section class="settings-section">
+        <h4 class="modal-section-heading">Lucid API</h4>
+        <p class="hint">Your API key is stored locally in this browser (localStorage) and sent directly from this page to Lucid's API — no server-side proxy is used.</p>
+        <div class="field-grid settings-grid">
         <label>
           <span>API Key</span>
           <input id="lucidApiKeyInput" type="password" placeholder="Paste your Lucid API key…" autocomplete="off">
@@ -435,14 +445,36 @@
             <option value="lucidspark">Lucidspark</option>
           </select>
         </label>
-        <label class="field-span-2">
-          <span>Image size in Lucid (<span id="lucidImageScaleValue">100</span>%)</span>
-          <input id="lucidImageScaleInput" type="range" min="25" max="400" step="5" value="100" class="slider">
+        <label>
+          <span>Image size in Lucid (%)</span>
+          <input id="lucidImageScaleInput" type="number" min="25" max="400" step="5" value="100" inputmode="numeric">
         </label>
-        <p class="hint field-span-2">Scales how large images appear after pasting (Copy for Lucidchart) or sending (Send to Lucid ↑), relative to their on-screen grid size here. Does not affect this app's canvas.</p>
+        <label>
+          <span>Image pixel dimensions (%)</span>
+          <input id="lucidImagePixelScaleInput" type="number" min="25" max="200" step="5" value="100" inputmode="numeric">
+        </label>
+        <label>
+          <span>Label text size (px)</span>
+          <input id="lucidLabelTextSizeInput" type="number" min="8" max="72" step="1" value="14" inputmode="numeric">
+        </label>
+
+        <p class="hint field-span-2">Image size controls how large blocks appear in Lucid. Image pixel dimensions controls the underlying exported raster resolution. Label text size affects both Copy and Send label objects.</p>
+
         <label class="checkbox-field">
           <input id="lucidCompressImagesInput" type="checkbox" checked>
           <span>Compress images before sending (recommended for large imports, e.g. multi-page PDFs)</span>
+        </label>
+        <label class="checkbox-field field-span-2">
+          <input id="lucidMergeSpreadsInput" type="checkbox" checked>
+          <span>Merge linked spreads into a single exported image when sending to Lucid</span>
+        </label>
+        <label class="checkbox-field field-span-2">
+          <input id="lucidIncludeOutlineInput" type="checkbox" checked>
+          <span>Add a thin black outline around each exported image or merged spread</span>
+        </label>
+        <label class="checkbox-field field-span-2">
+          <input id="lucidIncludePageLabelsInput" type="checkbox">
+          <span>Add page labels under exports (single pages center label; spreads use left/right labels)</span>
         </label>
         <label>
           <span>Output file type</span>
@@ -461,10 +493,10 @@
             <option value="custom">Custom…</option>
           </select>
         </label>
-        <div id="lucidCustomCompressionFields" class="field-grid" style="display:none;">
+        <div id="lucidCustomCompressionFields" class="field-grid settings-grid" style="display:none;">
           <label>
-            <span>Custom quality (<span id="lucidCustomQualityValue">80</span>%)</span>
-            <input id="lucidCustomQualityInput" type="range" min="1" max="100" step="1" value="80">
+            <span>Custom quality (%)</span>
+            <input id="lucidCustomQualityInput" type="number" min="1" max="100" step="1" value="80" inputmode="numeric">
           </label>
           <label>
             <span>Max image dimension (px)</span>
@@ -472,8 +504,10 @@
           </label>
         </div>
         <p class="hint">Lucid's Standard Import supports JPEG, PNG, GIF, BMP, and TIFF images (SVGs are converted to PNG on import) — WebP is not supported, so it isn't offered here.</p>
-      </div>
-      <p class="hint">Need an API key? Go to <a href="https://lucid.app/developer" target="_blank" rel="noopener">lucid.app/developer</a>, create an app, and generate an API key with the <strong>DocumentEdit</strong> grant.</p>
+        </div>
+        <p class="hint">Need an API key? Go to <a href="https://lucid.app/developer" target="_blank" rel="noopener">lucid.app/developer</a>, create an app, and generate an API key with the <strong>DocumentEdit</strong> grant.</p>
+      </section>
+
       <div class="modal-actions">
         <button id="lucidSettingsCancelBtn" class="button" type="button">Cancel</button>
         <button id="lucidSettingsSaveBtn" class="button button-primary" type="button">Save</button>
