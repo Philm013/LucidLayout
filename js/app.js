@@ -3673,7 +3673,6 @@ function createGridCell(assetId, index, frame) {
       img.decoding = 'async';
       img.loading = 'lazy';
       img.style.objectFit = state.fit;
-      img.style.objectPosition = 'center';
       slotButton.appendChild(img);
 
       const caption = document.createElement('div');
