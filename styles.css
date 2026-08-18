@@ -1023,8 +1023,51 @@ input[type="number"]::-webkit-inner-spin-button {
   object-fit: cover;
 }
 
+.grid-cell.spread-left:not(.spread-right) .grid-cell-image {
+  object-position: right center;
+}
+
+.grid-cell.spread-right:not(.spread-left) .grid-cell-image {
+  object-position: left center;
+}
+
+.grid-cell.spread-left.spread-right .grid-cell-image {
+  object-position: center;
+}
+
 .grid-cell.drag-over {
   outline: 2px solid var(--accent);
+}
+
+.grid-cell.drag-ghost-target {
+  z-index: 8;
+}
+
+.grid-cell.drag-ghost-target::before {
+  position: absolute;
+  inset: 4px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed rgba(95, 211, 255, 0.95);
+  border-radius: calc(10px * var(--ui-scale));
+  background: rgba(95, 211, 255, 0.18);
+  color: #eaf8ff;
+  content: attr(data-drag-ghost-label);
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-size: calc(11px * var(--ui-scale));
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  pointer-events: none;
+  z-index: 12;
+  box-shadow: 0 0 0 3px rgba(95, 211, 255, 0.16), inset 0 0 20px rgba(95, 211, 255, 0.18);
+}
+
+.grid-cell.drag-ghost-target.swap-mode::before {
+  border-color: rgba(134, 242, 190, 0.95);
+  background: rgba(134, 242, 190, 0.18);
+  color: #eafff4;
+  box-shadow: 0 0 0 3px rgba(134, 242, 190, 0.16), inset 0 0 20px rgba(134, 242, 190, 0.18);
 }
 
 .grid-cell.drag-over.swap-mode {
@@ -1525,7 +1568,7 @@ input[type="number"]::-webkit-inner-spin-button {
   place-items: safe center;
   background: rgba(7, 16, 28, 0.72);
   z-index: 60;
-  padding: calc(12px * var(--ui-scale));
+  padding: clamp(8px, 1.5vw, calc(20px * var(--ui-scale)));
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -1535,8 +1578,8 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .modal-card {
-  width: min(520px, 100%);
-  max-height: calc(100vh - 24px);
+  width: min(92vw, 1180px);
+  max-height: min(94vh, 1120px);
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
@@ -1550,8 +1593,8 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .settings-modal-card {
-  width: min(860px, 100%);
-  max-height: min(92vh, 980px);
+  width: min(94vw, 1180px);
+  max-height: min(94vh, 1120px);
   min-height: 0;
   overflow: hidden;
   padding: calc(16px * var(--ui-scale));
@@ -1621,8 +1664,9 @@ input[type="number"]::-webkit-inner-spin-button {
 
 .preview-modal-card {
   position: relative;
-  width: min(92vw, 1080px);
-  max-height: calc(100vh - 24px);
+  width: min(96vw, 1600px);
+  height: min(94vh, 1100px);
+  max-height: calc(100vh - 16px);
   min-height: 0;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
@@ -1715,8 +1759,8 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .history-modal-card {
-  width: min(720px, 95vw);
-  max-height: min(80vh, calc(100vh - 24px));
+  width: min(92vw, 1040px);
+  max-height: min(90vh, 1080px);
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -1725,8 +1769,8 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .help-modal-card {
-  width: min(860px, 96vw);
-  max-height: min(86vh, calc(100vh - 24px));
+  width: min(92vw, 1120px);
+  max-height: min(90vh, 1080px);
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -2072,6 +2116,15 @@ input[type="number"]::-webkit-inner-spin-button {
     padding: calc(12px * var(--ui-scale));
   }
 
+  .modal-card {
+    width: 100%;
+    max-height: 96vh;
+  }
+
+  .preview-modal-card {
+    height: 96vh;
+  }
+
   .settings-grid {
     grid-template-columns: 1fr;
   }
@@ -2130,9 +2183,9 @@ input[type="number"]::-webkit-inner-spin-button {
 
 /* ── Document Import Modal ────────────────────────────────────────────────── */
 .doc-import-card {
-  width: min(96vw, 1400px);
-  height: min(92vh, 980px);
-  max-height: calc(100vh - 24px);
+  width: min(96vw, 1600px);
+  height: min(94vh, 1100px);
+  max-height: calc(100vh - 16px);
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -2532,9 +2585,9 @@ input[type="number"]::-webkit-inner-spin-button {
 
 .doc-lightbox-card {
   position: relative;
-  width: min(96vw, 1500px);
-  height: min(94vh, 980px);
-  max-height: calc(100vh - 24px);
+  width: min(98vw, 1800px);
+  height: min(96vh, 1200px);
+  max-height: calc(100vh - 16px);
   min-height: 0;
   border-radius: 12px;
   border: 1px solid var(--panel-border);
