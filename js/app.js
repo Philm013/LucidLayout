@@ -3808,11 +3808,12 @@ function createGridCell(assetId, index, frame) {
     cell.classList.add('drag-over');
   });
 
-  cell.addEventListener('dragleave', () => {
+  cell.addEventListener('dragleave', event => {
     cell.classList.remove('drag-over', 'swap-mode');
     cell.classList.remove('flow-insert-before', 'flow-insert-after');
     cell.classList.remove('drag-ghost-target');
     delete cell.dataset.dragGhostLabel;
+    if (!cell.contains(event.relatedTarget)) clearFlowPreview();
   });
 
   cell.addEventListener('drop', event => {
