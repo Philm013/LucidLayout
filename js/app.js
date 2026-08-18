@@ -1917,19 +1917,12 @@ async function addFiles(files) {
     return;
   }
 
-  const existingKeys = new Set(
-    state.assets
-      .map(asset => asset.importKey || `${asset.name}::${asset.size ?? ''}::${asset.lastModified ?? ''}`)
-      .filter(Boolean)
-  );
   const batchKeys = new Set();
   const uniqueFiles = [];
-  let skipped = 0;
 
   for (const file of imageFiles) {
     const key = `${file.name}::${file.size}::${file.lastModified}`;
-    if (existingKeys.has(key) || batchKeys.has(key)) {
-      skipped += 1;
+    if (batchKeys.has(key)) {
       continue;
     }
     batchKeys.add(key);
@@ -1944,9 +1937,6 @@ async function addFiles(files) {
   state.pendingImportFiles = uniqueFiles;
   state.awaitingAppendSelection = false;
   openImportModeModal(uniqueFiles.length);
-  if (skipped > 0) {
-    showToast(`${skipped} duplicate${skipped === 1 ? '' : 's'} skipped before import mode`);
-  }
 }
 
 function clearGridSlot(index) {
@@ -2370,6 +2360,10 @@ function clearFlowPreview() {
   state.flowPreview = null;
   hideDragTooltip();
   if (!els.grid) return;
+    els.grid.querySelectorAll('.drag-ghost-target').forEach(node => {
+      node.classList.remove('drag-ghost-target');
+      delete node.dataset.dragGhostLabel;
+    });
     const existingLine = els.grid.querySelector('.grid-insert-line');
     if (existingLine) existingLine.classList.add('hidden');
     els.grid.querySelectorAll('.flow-insert-before, .flow-insert-after, .swap-mode, .shift-preview-right').forEach(node => {
@@ -3781,6 +3775,14 @@ function createGridCell(assetId, index, frame) {
     if (state.dragPayload?.type === 'slot' || state.dragPayload?.type === 'group' || state.dragPayload?.type === 'asset') {
       const flow = resolveFlowInsertionForCell(index, event);
       clearFlowPreview();
+      const payload = state.dragPayload;
+      const sourceAsset = payload.type === 'asset' ? findAssetById(payload.assetId) : null;
+      cell.classList.add('drag-ghost-target');
+      cell.dataset.dragGhostLabel = payload.type === 'asset'
+        ? `Place ${sourceAsset?.name || 'staged image'}`
+        : payload.type === 'group'
+          ? `Move ${payload.slotIndices?.length || 1} selected images`
+          : 'Move image';
       if (flow.nearBetween) {
         updateInsertPreview(index, flow.placement);
         const groupSize = state.dragPayload.type === 'group' ? state.dragPayload.slotIndices?.length || 1 : 1;
@@ -3809,6 +3811,8 @@ function createGridCell(assetId, index, frame) {
   cell.addEventListener('dragleave', () => {
     cell.classList.remove('drag-over', 'swap-mode');
     cell.classList.remove('flow-insert-before', 'flow-insert-after');
+    cell.classList.remove('drag-ghost-target');
+    delete cell.dataset.dragGhostLabel;
   });
 
   cell.addEventListener('drop', event => {
@@ -5305,10 +5309,23 @@ async function executeImportMode(files, mode, selectedIndex = state.selectedSlot
     }
   }
 
+  const existingKeys = new Set(
+    state.assets
+      .map(asset => asset.importKey || `${asset.name}::${asset.size ?? ''}::${asset.lastModified ?? ''}`)
+      .filter(Boolean)
+  );
+  const importFiles = mode === 'replace'
+    ? files
+    : files.filter(file => !existingKeys.has(`${file.name}::${file.size}::${file.lastModified}`));
+  if (importFiles.length === 0) {
+    showToast('All selected images are already imported');
+    return;
+  }
+
   const labelPrefix = typeof options.labelPrefix === 'string' ? options.labelPrefix.trim() : '';
   const labelStart = Math.max(0, Math.round(Number(options.labelStart) || 0));
   const nextAssets = [];
-  for (const [index, file] of files.entries()) {
+  for (const [index, file] of importFiles.entries()) {
     if (labelPrefix) file.pageLabel = `${labelPrefix} ${labelStart + index}`;
     nextAssets.push(await fileToAsset(file));
   }
@@ -5733,6 +5750,13 @@ function bindCanvasInteractions() {
 
     const isBackground = event.target === els.canvasViewport || event.target === els.canvasStage || event.target === els.grid;
     if (!isBackground || event.button !== 0) return;
+
+    if (state.selectedSlotIndex !== null || state.multiSelectedSlots.length > 0) {
+      state.selectedSlotIndex = null;
+      state.multiSelectedSlots = [];
+      closeCellActionMenus();
+      renderGrid();
+    }
 
     state.isPanning = true;
     panStartX = event.clientX - state.panX;
