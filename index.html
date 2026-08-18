@@ -3,12 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0c1320">
-  <title>PNG Grid</title>
+  <title>LucidLayout</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <script>
+    try {
+      document.documentElement.dataset.theme = localStorage.getItem('png-grid-theme') === 'light' ? 'light' : 'dark';
+    } catch {}
+  </script>
   <link rel="stylesheet" href="styles.css">
   <!-- JSZip for building .lucid ZIP in the browser -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -29,7 +34,7 @@
 
         <section class="panel-section controls-card">
           <h3>Layout</h3>
-          <div class="field-grid">
+          <div class="field-grid layout-fields">
             <label class="stepper">
               <span>Rows</span>
               <div class="stepper-row">
@@ -46,12 +51,23 @@
                 <button id="colsUpBtn" type="button" class="mini-button">+</button>
               </div>
             </label>
-            <label><span>Horizontal Gap <span id="gapXLabel" class="size-label">medium</span></span><input id="gapXInput" type="range" min="0" max="40" value="12" class="slider"></label>
-            <label><span>Vertical Gap <span id="gapYLabel" class="size-label">medium</span></span><input id="gapYInput" type="range" min="0" max="40" value="12" class="slider"></label>
-            <label><span>Cell Width <span id="cellWidthLabel" class="size-label">medium</span></span><input id="cellWidthInput" type="range" min="40" max="300" value="160" class="slider"></label>
-            <label><span>Cell Height <span id="cellHeightLabel" class="size-label">medium</span></span><input id="cellHeightInput" type="range" min="40" max="300" value="120" class="slider"></label>
+            <label><span class="slider-heading"><span>Horizontal Gap</span><span id="gapXLabel" class="size-label">medium</span></span><input id="gapXInput" type="range" min="0" max="65" value="12" class="slider"></label>
+            <label><span class="slider-heading"><span>Vertical Gap</span><span id="gapYLabel" class="size-label">medium</span></span><input id="gapYInput" type="range" min="0" max="65" value="12" class="slider"></label>
+            <label><span class="slider-heading"><span>Cell Width</span><span id="cellWidthLabel" class="size-label">medium</span></span><input id="cellWidthInput" type="range" min="40" max="800" value="160" class="slider"></label>
+            <label><span class="slider-heading"><span>Cell Height</span><span id="cellHeightLabel" class="size-label">medium</span></span><input id="cellHeightInput" type="range" min="40" max="800" value="120" class="slider"></label>
+            <label class="checkbox-field field-span-2">
+              <input id="autoSizeCellsInput" type="checkbox">
+              <span>Auto-size cells to imported image shape</span>
+            </label>
+            <label id="autoSizeModeField" class="field-span-2" hidden>
+              <span>Fill grid to the</span>
+              <select id="autoSizeModeSelect">
+                <option value="width">Full width</option>
+                <option value="height">Full height</option>
+              </select>
+            </label>
             <div class="field-span-2 gap-controls-wrap">
-              <span>Column spread links</span>
+              <span>Create 2-column Spread links</span>
               <div id="gapControlsContainer" class="gap-controls" aria-label="Toggle linked column spreads"></div>
             </div>
             <label class="field-span-2">
@@ -68,7 +84,6 @@
           <h3>Grid actions</h3>
           <div class="stacked-actions">
             <button id="autoPackBtn" class="button" type="button">Auto pack grid</button>
-            <button id="shuffleBtn" class="button" type="button">Shuffle layout</button>
             <button id="clearGridBtn" class="button" type="button">Clear and Reset Grid</button>
           </div>
         </section>
@@ -274,15 +289,41 @@
       <h3 id="importModeTitle">How should new images be added?</h3>
       <p class="hint" id="importModeMessage"></p>
       <p class="hint" id="importExistingNotice"></p>
-      <div class="stacked-actions">
-        <button id="importReplaceBtn" class="button" type="button">Replace current grid</button>
-        <button id="importFillBtn" class="button" type="button">Fill available gaps</button>
-        <button id="importAppendStartBtn" class="button" type="button">Append at beginning</button>
-        <button id="importAppendEndBtn" class="button" type="button">Append at end</button>
-        <button id="importAppendSelectedBtn" class="button" type="button">Select spot to append at</button>
-        <button id="importTrayBtn" class="button" type="button">Add to Image Tray</button>
+      <div class="field-grid import-preferences">
+        <label>
+          <span>Page label</span>
+          <input id="importLabelPrefixInput" type="text" placeholder="Page">
+        </label>
+        <label>
+          <span>Start number</span>
+          <input id="importLabelStartInput" type="number" min="0" step="1" value="1">
+        </label>
+        <label class="checkbox-field field-span-2 import-auto-size-field">
+          <input id="importAutoSizeCellsInput" type="checkbox">
+          <span>Auto-size cells to imported image shape</span>
+        </label>
       </div>
-      <p class="hint">Tip: click a cell to mark selected slot before import.</p>
+      <div class="import-mode-layout">
+        <section class="import-mode-group">
+          <div class="import-mode-heading">
+            <h4>Replace</h4>
+            <p class="hint">Start a fresh layout with these images.</p>
+          </div>
+          <button id="importReplaceBtn" class="button button-primary" type="button">Replace current grid</button>
+        </section>
+        <section class="import-mode-group">
+          <div class="import-mode-heading">
+            <h4>Add to current grid</h4>
+            <p class="hint">Keep the current layout and choose where new images begin.</p>
+          </div>
+          <div class="import-mode-button-grid">
+            <button id="importAppendStartBtn" class="button" type="button">Append at beginning</button>
+            <button id="importAppendEndBtn" class="button" type="button">Append at end</button>
+            <button id="importTrayBtn" class="button" type="button">Add to Image Tray</button>
+          </div>
+        </section>
+      </div>
+      <p class="hint import-mode-footnote">Images that do not fit are staged in the Image Tray automatically.</p>
     </div>
   </div>
 
@@ -331,6 +372,7 @@
             <h3 id="previewModalTitle">Image preview</h3>
             <p class="hint" id="previewModalCaption"></p>
           </div>
+          <button id="previewCloseBtn" class="mini-button preview-modal-close" type="button" aria-label="Close image preview" title="Close image preview">✕</button>
           <div class="preview-modal-controls">
             <button id="previewZoomOutBtn" class="mini-button" type="button" aria-label="Zoom out">−</button>
             <span id="previewZoomLabel" class="preview-zoom-label">100%</span>
@@ -346,7 +388,6 @@
         </div>
         <div class="preview-modal-actions">
           <button id="previewPrevBtn" class="button" type="button">Previous</button>
-          <button id="previewCloseBtn" class="button" type="button">Close</button>
           <button id="previewNextBtn" class="button button-primary" type="button">Next</button>
         </div>
       </div>
@@ -398,7 +439,7 @@
           <ul class="help-list">
             <li>Use <strong>Import</strong> to add image files, folders, or document pages.</li>
             <li>Edit the grid with rows, columns, gaps, and cell size controls in the sidebar.</li>
-            <li>Use <strong>Auto pack</strong>, <strong>Shuffle</strong>, and <strong>Clear and Reset Grid</strong> for layout management.</li>
+            <li>Use <strong>Auto pack</strong> and <strong>Clear and Reset Grid</strong> for layout management.</li>
             <li>Use <strong>Export</strong> to copy Lucid payloads, copy a PNG preview, or download a PNG preview.</li>
             <li>Use <strong>Send to Lucid</strong> after adding an API key in <strong>Settings</strong>.</li>
           </ul>
@@ -487,93 +528,118 @@
 
       <section class="settings-section">
         <h4 class="modal-section-heading">Interface</h4>
-        <div class="field-grid settings-grid">
+        <div class="field-grid settings-grid settings-grid-two">
           <label>
             <span>Interface size (%)</span>
             <input id="uiScaleInput" type="number" min="75" max="150" step="5" value="110" inputmode="numeric">
           </label>
+          <label>
+            <span>Default page label</span>
+            <input id="importSettingsLabelPrefixInput" type="text" placeholder="Page">
+          </label>
+          <label>
+            <span>Default label start number</span>
+            <input id="importSettingsLabelStartInput" type="number" min="0" step="1" value="1" inputmode="numeric">
+          </label>
+          <label class="checkbox-field field-span-2">
+            <input id="lightThemeInput" type="checkbox">
+            <span>Use light theme</span>
+          </label>
         </div>
-        <p class="hint">Scales the whole app's text, buttons, and panels larger or smaller. Applied immediately and remembered on this device.</p>
+        <p class="hint">Interface size and theme apply immediately and are remembered on this device.</p>
       </section>
 
       <section class="settings-section">
         <h4 class="modal-section-heading">Lucid API</h4>
         <p class="hint">Your API key is stored locally in this browser (localStorage) and sent directly from this page to Lucid's API — no server-side proxy is used.</p>
-        <div class="field-grid settings-grid">
-        <label>
-          <span>API Key</span>
-          <input id="lucidApiKeyInput" type="password" placeholder="Paste your Lucid API key…" autocomplete="off">
-        </label>
-        <label>
-          <span>Default document title</span>
-          <input id="lucidDocTitleInput" type="text" placeholder="PNG Grid Export">
-        </label>
-        <label>
-          <span>Product</span>
-          <select id="lucidProductSelect">
-            <option value="lucidchart">Lucidchart</option>
-            <option value="lucidspark">Lucidspark</option>
-          </select>
-        </label>
-        <label>
-          <span>Image size in Lucid (%)</span>
-          <input id="lucidImageScaleInput" type="number" min="25" max="400" step="5" value="100" inputmode="numeric">
-        </label>
-        <label>
-          <span>Image pixel dimensions (%)</span>
-          <input id="lucidImagePixelScaleInput" type="number" min="25" max="200" step="5" value="100" inputmode="numeric">
-        </label>
-        <label>
-          <span>Label text size (px)</span>
-          <input id="lucidLabelTextSizeInput" type="number" min="8" max="72" step="1" value="14" inputmode="numeric">
-        </label>
-
-        <p class="hint field-span-2">Image size controls how large blocks appear in Lucid. Image pixel dimensions controls the underlying exported raster resolution. Label text size affects both Copy and Send label objects.</p>
-
-        <label class="checkbox-field">
-          <input id="lucidCompressImagesInput" type="checkbox" checked>
-          <span>Compress images before sending (recommended for large imports, e.g. multi-page PDFs)</span>
-        </label>
-        <label class="checkbox-field field-span-2">
-          <input id="lucidMergeSpreadsInput" type="checkbox" checked>
-          <span>Merge linked spreads into a single exported image when sending to Lucid</span>
-        </label>
-        <label class="checkbox-field field-span-2">
-          <input id="lucidIncludeOutlineInput" type="checkbox" checked>
-          <span>Add a thin black outline around each exported image or merged spread</span>
-        </label>
-        <label class="checkbox-field field-span-2">
-          <input id="lucidIncludePageLabelsInput" type="checkbox">
-          <span>Add page labels under exports (single pages center label; spreads use left/right labels)</span>
-        </label>
-        <label>
-          <span>Output file type</span>
-          <select id="lucidCompressionFormatSelect">
-            <option value="auto" selected>Auto (JPEG for photos/pages, PNG for transparency)</option>
-            <option value="jpeg">Force JPEG (smallest, no transparency)</option>
-            <option value="png">Force PNG (lossless, keeps transparency)</option>
-          </select>
-        </label>
-        <label>
-          <span>Image quality</span>
-          <select id="lucidCompressionLevelSelect">
-            <option value="high">High quality (larger files)</option>
-            <option value="balanced" selected>Balanced (recommended)</option>
-            <option value="small">Smaller files (lower quality)</option>
-            <option value="custom">Custom…</option>
-          </select>
-        </label>
-        <div id="lucidCustomCompressionFields" class="field-grid settings-grid" style="display:none;">
-          <label>
-            <span>Custom quality (%)</span>
-            <input id="lucidCustomQualityInput" type="number" min="1" max="100" step="1" value="80" inputmode="numeric">
-          </label>
-          <label>
-            <span>Max image dimension (px)</span>
-            <input id="lucidCustomMaxDimensionInput" type="number" min="200" max="4000" step="50" value="1800">
-          </label>
+        <div class="settings-subsection">
+          <h5 class="settings-subsection-heading">Connection</h5>
+          <div class="field-grid settings-grid">
+            <label class="field-span-2">
+              <span>API key</span>
+              <input id="lucidApiKeyInput" type="password" placeholder="Paste your Lucid API key…" autocomplete="off">
+            </label>
+            <label>
+              <span>Product</span>
+              <select id="lucidProductSelect">
+                <option value="lucidchart">Lucidchart</option>
+                <option value="lucidspark">Lucidspark</option>
+              </select>
+            </label>
+            <label>
+              <span>Default document title</span>
+              <input id="lucidDocTitleInput" type="text" placeholder="PNG Grid Export">
+            </label>
+          </div>
         </div>
-        <p class="hint">Lucid's Standard Import supports JPEG, PNG, GIF, BMP, and TIFF images (SVGs are converted to PNG on import) — WebP is not supported, so it isn't offered here.</p>
+
+        <div class="settings-subsection">
+          <h5 class="settings-subsection-heading">Export sizing</h5>
+          <div class="field-grid settings-grid">
+            <label>
+              <span>Image size in Lucid (%)</span>
+              <input id="lucidImageScaleInput" type="number" min="25" max="400" step="5" value="100" inputmode="numeric">
+            </label>
+            <label>
+              <span>Image pixel dimensions (%)</span>
+              <input id="lucidImagePixelScaleInput" type="number" min="25" max="200" step="5" value="100" inputmode="numeric">
+            </label>
+            <label>
+              <span>Label text size (px)</span>
+              <input id="lucidLabelTextSizeInput" type="number" min="8" max="72" step="1" value="14" inputmode="numeric">
+            </label>
+            <p class="hint field-span-3">Image size controls block size in Lucid. Pixel dimensions control raster resolution. Label text size affects Copy and Send label objects.</p>
+          </div>
+        </div>
+
+        <div class="settings-subsection">
+          <h5 class="settings-subsection-heading">File optimization</h5>
+          <div class="field-grid settings-grid">
+            <label class="checkbox-field field-span-3">
+              <input id="lucidCompressImagesInput" type="checkbox" checked>
+              <span>Compress images before sending</span>
+            </label>
+            <label class="checkbox-field field-span-3">
+              <input id="lucidMergeSpreadsInput" type="checkbox" checked>
+              <span>Merge linked spreads into a single exported image</span>
+            </label>
+            <label class="checkbox-field field-span-3">
+              <input id="lucidIncludeOutlineInput" type="checkbox" checked>
+              <span>Add a thin outline around each exported image or merged spread</span>
+            </label>
+            <label class="checkbox-field field-span-3">
+              <input id="lucidIncludePageLabelsInput" type="checkbox">
+              <span>Add page labels to the grid and exports</span>
+            </label>
+            <label>
+              <span>Output file type</span>
+              <select id="lucidCompressionFormatSelect">
+                <option value="auto" selected>Auto</option>
+                <option value="jpeg">JPEG</option>
+                <option value="png">PNG</option>
+              </select>
+            </label>
+            <label>
+              <span>Image quality</span>
+              <select id="lucidCompressionLevelSelect">
+                <option value="high">High</option>
+                <option value="balanced" selected>Balanced</option>
+                <option value="small">Smaller</option>
+                <option value="custom">Custom…</option>
+              </select>
+            </label>
+          </div>
+          <div id="lucidCustomCompressionFields" class="field-grid settings-grid settings-grid-two" style="display:none;">
+            <label>
+              <span>Custom quality (%)</span>
+              <input id="lucidCustomQualityInput" type="number" min="1" max="100" step="1" value="80" inputmode="numeric">
+            </label>
+            <label>
+              <span>Max image dimension (px)</span>
+              <input id="lucidCustomMaxDimensionInput" type="number" min="200" max="4000" step="50" value="1800" inputmode="numeric">
+            </label>
+          </div>
+          <p class="hint">Standard Import supports JPEG, PNG, GIF, BMP, and TIFF. SVGs are converted to PNG; WebP is not offered.</p>
         </div>
         <p class="hint">Need an API key? Go to <a href="https://lucid.app/developer" target="_blank" rel="noopener">lucid.app/developer</a>, create an app, and generate an API key with the <strong>DocumentEdit</strong> grant.</p>
       </section>
@@ -587,7 +653,7 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="./js/app.js"></script>
   <script type="module">
     import { extractDocumentThumbnails, ALL_ACCEPT } from './js/doc-importer.js';
     window.__docImporter = { extractDocumentThumbnails, ALL_ACCEPT };

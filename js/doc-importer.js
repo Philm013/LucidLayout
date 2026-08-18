@@ -15,8 +15,16 @@
 
 // ─── CDN URLs ────────────────────────────────────────────────────────────────
 const CDN = {
-  pdfjs:   'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.mjs',
-  pdfjsWorker: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.mjs',
+  pdfjs: [
+    {
+      module: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.mjs',
+      worker: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.mjs'
+    },
+    {
+      module: 'https://unpkg.com/pdfjs-dist@4.2.67/build/pdf.min.mjs',
+      worker: 'https://unpkg.com/pdfjs-dist@4.2.67/build/pdf.worker.min.mjs'
+    }
+  ],
   docxPreview: 'https://cdn.jsdelivr.net/npm/docx-preview@0.3.3/dist/docx-preview.min.js',
   mammoth: 'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js',
   html2canvas: 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
@@ -26,25 +34,80 @@ const CDN = {
 
 // ─── Loader utilities ─────────────────────────────────────────────────────────
 const _loaded = {};
+const LIBRARY_LOAD_TIMEOUT_MS = 15000;
+const PDF_OPEN_TIMEOUT_MS = 30000;
+
+function withTimeout(promise, timeoutMs, message, onTimeout) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      try {
+        onTimeout?.();
+      } finally {
+        reject(Object.assign(new Error(message), { code: 'DOC_LIBRARY_TIMEOUT' }));
+      }
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 async function loadScript(key, url) {
   if (_loaded[key]) return _loaded[key];
-  _loaded[key] = new Promise((resolve, reject) => {
+  const loadPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = url;
     s.onload = () => resolve(true);
     s.onerror = () => reject(new Error(`Failed to load ${key} from CDN. Check internet connection.`));
     document.head.appendChild(s);
   });
+  _loaded[key] = withTimeout(
+    loadPromise,
+    LIBRARY_LOAD_TIMEOUT_MS,
+    `Timed out loading ${key}. Check your internet connection and try again.`
+  ).catch(err => {
+    delete _loaded[key];
+    throw err;
+  });
   return _loaded[key];
 }
 
 async function loadModule(key, url) {
   if (_loaded[key]) return _loaded[key];
-  _loaded[key] = import(/* @vite-ignore */ url).catch(err => {
+  const loadPromise = withTimeout(
+    import(/* @vite-ignore */ url),
+    LIBRARY_LOAD_TIMEOUT_MS,
+    `Timed out loading ${key}. Check your internet connection and try again.`
+  ).catch(err => {
+    if (err.code === 'DOC_LIBRARY_TIMEOUT') throw err;
     throw new Error(`Failed to load ${key}: ${err.message}`);
   });
+  _loaded[key] = loadPromise.catch(err => {
+    delete _loaded[key];
+    throw err;
+  });
   return _loaded[key];
+}
+
+async function loadPdfJs() {
+  if (_loaded.pdfjs) return _loaded.pdfjs;
+  const loadPromise = (async () => {
+    let lastError = null;
+    for (let index = 0; index < CDN.pdfjs.length; index += 1) {
+      const source = CDN.pdfjs[index];
+      try {
+        const module = await loadModule(`pdfjs-${index + 1}`, source.module);
+        return { module, worker: source.worker };
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw new Error(`Could not load PDF.js. ${lastError?.message || 'Check your internet connection and try again.'}`);
+  })();
+  _loaded.pdfjs = loadPromise.catch(err => {
+    delete _loaded.pdfjs;
+    throw err;
+  });
+  return _loaded.pdfjs;
 }
 
 // ─── Format detection ─────────────────────────────────────────────────────────
@@ -114,11 +177,19 @@ function canvasToDataUrl(canvas) {
 
 // ─── PDF extractor ────────────────────────────────────────────────────────────
 async function extractPdf(buffer, { onProgress, signal } = {}) {
-  const pdfjsMod = await loadModule('pdfjs', CDN.pdfjs);
+  onProgress?.({ current: 0, total: 1, label: 'Loading PDF library…' });
+  const { module: pdfjsMod, worker } = await loadPdfJs();
   const pdfjsLib = pdfjsMod.default || pdfjsMod;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfjsWorker;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = worker;
 
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  onProgress?.({ current: 0, total: 1, label: 'Opening PDF…' });
+  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+  const pdf = await withTimeout(
+    loadingTask.promise,
+    PDF_OPEN_TIMEOUT_MS,
+    'Timed out opening the PDF. The file may be very large or the PDF worker could not load.',
+    () => { void loadingTask.destroy(); }
+  );
   const results = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
