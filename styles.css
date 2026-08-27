@@ -1612,6 +1612,10 @@ input[type="number"]::-webkit-inner-spin-button {
   font-weight: 700;
 }
 
+.copy-scope-alert:empty {
+  display: none;
+}
+
 .copy-scope-card .modal-actions {
   margin-top: 2px;
 }
