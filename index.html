@@ -109,7 +109,7 @@
                   </div>
                   <button id="exportMenuBtn" class="button button-primary" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="exportMenu">Export ▾</button>
                   <div id="exportMenu" class="menu-pop menu-pop-right" role="group" aria-label="Export options" hidden>
-                    <button id="copyLucidBtn" class="menu-item" type="button">Copy for Lucidchart</button>
+                    <button id="copyLucidBtn" class="menu-item" type="button">Copy for Lucidchart…</button>
                     <button id="sendToLucidBtn" class="menu-item" type="button">Send to Lucid ↑</button>
                     <hr class="menu-divider">
                     <button id="copyPngBtn" class="menu-item" type="button">Copy preview PNG</button>
@@ -284,6 +284,58 @@
     </div>
   </div>
 
+  <div id="copyScopeModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card copy-scope-card" role="dialog" aria-modal="true" aria-labelledby="copyScopeTitle">
+      <div class="modal-header">
+        <div>
+          <h3 id="copyScopeTitle">Copy grid to Lucid</h3>
+          <p class="hint">Choose what should be placed on your clipboard.</p>
+        </div>
+      </div>
+      <div class="copy-scope-mode" role="radiogroup" aria-label="Copy scope">
+        <label class="copy-scope-option">
+          <input id="copyScopeFullInput" name="copyScopeMode" type="radio" value="full" checked>
+          <span><strong>Entire grid</strong><small>Copy every row and column</small></span>
+        </label>
+        <label class="copy-scope-option">
+          <input id="copyScopePartialInput" name="copyScopeMode" type="radio" value="partial">
+          <span><strong>Selected rows and columns</strong><small>Copy only the ranges you choose</small></span>
+        </label>
+      </div>
+      <div id="copyScopePartialOptions" class="copy-scope-partial-options" hidden>
+        <div class="field-grid copy-scope-fields">
+        <label>
+          <span>Rows</span>
+          <input id="copyScopeRowsInput" type="text" placeholder="e.g. 1-3, 6" aria-describedby="copyScopeHint">
+        </label>
+        <label>
+          <span>Columns</span>
+          <input id="copyScopeColsInput" type="text" placeholder="e.g. 1-2, 5" aria-describedby="copyScopeHint">
+        </label>
+        </div>
+      </div>
+      <label class="checkbox-field copy-batch-toggle">
+        <input id="copyBatchInput" type="checkbox">
+        <span class="copy-batch-label"><strong>Copy in batches</strong><small>Advance automatically after each copy</small></span>
+      </label>
+      <div id="copyBatchOptions" class="copy-batch-options" hidden>
+        <label>
+          <span>Rows per chunk</span>
+          <input id="copyBatchSizeInput" type="number" min="1" max="20" step="1" value="2">
+        </label>
+        <p id="copyBatchStatus" class="copy-batch-status" aria-live="polite"></p>
+      </div>
+      <p id="copyScopeHint" class="hint copy-scope-hint"></p>
+      <p id="copyScopeAlert" class="copy-scope-alert" role="status" aria-live="polite"></p>
+      <div class="modal-actions">
+        <button id="copyScopeCancelBtn" class="button" type="button">Cancel</button>
+        <button id="copyScopePrevBtn" class="button" type="button" hidden>Previous</button>
+        <button id="copyScopeCopyBtn" class="button button-primary" type="button">Copy entire grid</button>
+        <button id="copyScopeNextBtn" class="button" type="button" hidden>Next</button>
+      </div>
+    </div>
+  </div>
+
   <div id="importModeModal" class="modal-backdrop" aria-hidden="true">
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="importModeTitle">
       <h3 id="importModeTitle">How should new images be added?</h3>
@@ -441,6 +493,7 @@
             <li>Edit the grid with rows, columns, gaps, and cell size controls in the sidebar.</li>
             <li>Use <strong>Auto pack</strong> and <strong>Clear and Reset Grid</strong> for layout management.</li>
             <li>Use <strong>Export</strong> to copy Lucid payloads, copy a PNG preview, or download a PNG preview.</li>
+            <li>Choose <strong>Copy for Lucidchart…</strong> to copy selected rows and columns, or turn on batch mode to copy a few rows at a time.</li>
             <li>Use <strong>Send to Lucid</strong> after adding an API key in <strong>Settings</strong>.</li>
           </ul>
         </section>

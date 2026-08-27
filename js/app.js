@@ -13,6 +13,33 @@ const SHRINK_MODE_STORAGE_KEY = 'png-grid-shrink-mode';
 const IMPORT_SETTINGS_STORAGE_KEY = 'png-grid-import-settings';
 const LUCID_SETTINGS_STORAGE_KEY = 'png-grid-lucid-settings';
 
+function parseGridRange(value, max) {
+  const result = new Set();
+  const text = String(value || '').trim();
+  if (!text) return null;
+  for (const part of text.split(',')) {
+    const match = part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+    if (!match) return null;
+    const start = Number(match[1]);
+    const end = Number(match[2] || match[1]);
+    if (start < 1 || end < start || end > max) return null;
+    for (let index = start; index <= end; index += 1) result.add(index - 1);
+  }
+  return [...result].sort((a, b) => a - b);
+}
+
+function getLucidCopyScope() {
+  const rows = parseGridRange(els.copyScopeRowsInput?.value, state.rows);
+  const cols = parseGridRange(els.copyScopeColsInput?.value, state.cols);
+  if ((els.copyScopeRowsInput?.value.trim() && !rows) || (els.copyScopeColsInput?.value.trim() && !cols)) {
+    throw new Error(`Use row and column ranges between 1 and ${Math.max(state.rows, state.cols)}.`);
+  }
+  return {
+    rows: rows || Array.from({ length: state.rows }, (_, index) => index),
+    cols: cols || Array.from({ length: state.cols }, (_, index) => index)
+  };
+}
+
 function loadPageLabelVisibility() {
   try {
     const raw = localStorage.getItem(LUCID_SETTINGS_STORAGE_KEY);
@@ -4331,25 +4358,59 @@ async function buildLucidComposedItemDataUrl(item, pixelScale = 100) {
 async function buildLucidExportItemsForClipboard({
   mergeLinkedSpreads = true,
   imagePixelScale = 100,
-  onProgress = () => {}
+  onProgress = () => {},
+  scope = null
 } = {}) {
-  const metrics = getLayoutMetrics();
-  const usedAssetIds = [...new Set(state.grid.filter(Boolean))];
+  const fullMetrics = getLayoutMetrics();
+  const selectedRows = scope?.rows || Array.from({ length: state.rows }, (_, index) => index);
+  const selectedCols = scope?.cols || Array.from({ length: state.cols }, (_, index) => index);
+  const selectedColSet = new Set(selectedCols);
+  const columnOffsets = [];
+  let selectedWidth = 0;
+  selectedCols.forEach((originalCol, localCol) => {
+    columnOffsets[localCol] = selectedWidth;
+    const nextOriginalCol = selectedCols[localCol + 1];
+    const gap = nextOriginalCol === originalCol + 1 ? getGapAfterColumn(originalCol) : getActualGlobalGapX();
+    selectedWidth += fullMetrics.cellWidth + (nextOriginalCol == null ? 0 : gap);
+  });
+  const selectedHeight = fullMetrics.cellHeight * selectedRows.length + getActualGapY() * Math.max(0, selectedRows.length - 1);
+  const localColByOriginal = new Map(selectedCols.map((col, index) => [col, index]));
+  const metrics = {
+    ...fullMetrics,
+    width: selectedWidth,
+    height: selectedHeight,
+    columnOffsets
+  };
+  const usedAssetIds = [...new Set(selectedRows.flatMap(row => selectedCols.map(col => state.grid[row * state.cols + col])).filter(Boolean))];
   const fullResUrls = await getFullResDataUrls(usedAssetIds);
   const items = [];
 
-  for (let row = 0; row < state.rows; row += 1) {
-    for (let col = 0; col < state.cols;) {
+  for (let localRow = 0; localRow < selectedRows.length; localRow += 1) {
+    const row = selectedRows[localRow];
+    for (let localCol = 0; localCol < selectedCols.length;) {
+      const col = selectedCols[localCol];
       const slotIndex = row * state.cols + col;
       const assetId = state.grid[slotIndex];
       if (!assetId) {
-        col += 1;
+        localCol += 1;
         continue;
       }
 
-      const endCol = mergeLinkedSpreads ? getSpreadEndColForLucid(row, col) : col;
+      let endLocalCol = localCol;
+      if (mergeLinkedSpreads) {
+        while (endLocalCol < selectedCols.length - 1) {
+          const nextCol = selectedCols[endLocalCol + 1];
+          if (nextCol !== selectedCols[endLocalCol] + 1 || !isColumnGapLinked(selectedCols[endLocalCol])) break;
+          const leftIndex = row * state.cols + selectedCols[endLocalCol];
+          const rightIndex = row * state.cols + nextCol;
+          if (!state.grid[leftIndex] || !state.grid[rightIndex]) break;
+          endLocalCol += 1;
+        }
+      }
+      const endCol = selectedCols[endLocalCol];
       const slots = [];
-      for (let c = col; c <= endCol; c += 1) {
+      for (let localC = localCol; localC <= endLocalCol; localC += 1) {
+        const c = selectedCols[localC];
         const idx = row * state.cols + c;
         const id = state.grid[idx];
         if (!id) break;
@@ -4358,7 +4419,7 @@ async function buildLucidExportItemsForClipboard({
         slots.push({
           slotIndex: idx,
           asset,
-          left: metrics.columnOffsets[c],
+          left: metrics.columnOffsets[localC],
           width: metrics.cellWidth,
           url: fullResUrls.get(id) || asset.thumbUrl,
           label: inferLucidPageLabel(asset, idx + 1)
@@ -4369,15 +4430,15 @@ async function buildLucidExportItemsForClipboard({
         continue;
       }
 
-      const startCol = slots[0].slotIndex % state.cols;
-      const finalCol = slots[slots.length - 1].slotIndex % state.cols;
+      const startCol = localColByOriginal.get(slots[0].slotIndex % state.cols);
+      const finalCol = localColByOriginal.get(slots[slots.length - 1].slotIndex % state.cols);
       const x = metrics.columnOffsets[startCol];
-      const y = row * (metrics.cellHeight + getActualGapY());
+      const y = localRow * (metrics.cellHeight + getActualGapY());
       const width = (metrics.columnOffsets[finalCol] + metrics.cellWidth) - x;
       const height = metrics.cellHeight;
 
       items.push({
-        row,
+        row: localRow,
         startCol,
         endCol: finalCol,
         x,
@@ -4387,7 +4448,7 @@ async function buildLucidExportItemsForClipboard({
         slots,
         isSpread: slots.length > 1
       });
-      col = finalCol + 1;
+      localCol = endLocalCol + 1;
     }
   }
 
@@ -4504,7 +4565,7 @@ function buildLucidPlainTextFromItems(items) {
   return lines.join('\n');
 }
 
-async function buildLucidContentPayload(onProgress = () => {}) {
+async function buildLucidContentPayload(onProgress = () => {}, scope = null) {
   const { loadLucidSettings } = window.__lucidExport || {};
   const lucidSettings = loadLucidSettings ? loadLucidSettings() : {};
   const imageScale = clamp(Number(lucidSettings.imageScale) || 100, 25, 400) / 100;
@@ -4518,30 +4579,32 @@ async function buildLucidContentPayload(onProgress = () => {}) {
   const prepared = await buildLucidExportItemsForClipboard({
     mergeLinkedSpreads,
     imagePixelScale,
-    onProgress
+    onProgress,
+    scope
   });
 
   // Keep the payload coordinate system stable and only scale block geometry.
   // Scaling both geometry and payload Size together can normalize away the
   // difference in Lucid paste, making 100% and 200% look identical.
+  const pastedImageScale = imagePixelScale / 100;
   const baseScale = 10;
   const geometryScale = baseScale * imageScale;
   const base = { x: 10000, y: 1000 };
   const objects = [];
   const copiedItemIds = [];
   let zOrder = 20;
-  const labelHeight = Math.max(28, Math.round(labelTextSize * 2.8 * imageScale));
-  const labelGap = Math.max(8, Math.round(labelTextSize * 0.65 * imageScale));
+  const labelHeight = Math.max(28, Math.round(labelTextSize * 2.8 * imageScale * pastedImageScale));
+  const labelGap = Math.max(8, Math.round(labelTextSize * 0.65 * imageScale * pastedImageScale));
   let maxBottom = 0;
 
   onProgress('Building Lucid objects…');
   for (const item of prepared.items) {
     const sourceW = Math.max(1, item.sourceWidth || item.width);
     const sourceH = Math.max(1, item.sourceHeight || item.height);
-    const boxW = item.width;
+    const boxW = item.width * pastedImageScale;
     const boxH = boxW * (sourceH / sourceW);
-    const boxX = item.x;
-    const boxY = item.y;
+    const boxX = item.x * pastedImageScale;
+    const boxY = item.y * pastedImageScale;
 
     const id = lucidId();
     copiedItemIds.push(id);
@@ -4678,8 +4741,8 @@ async function buildLucidContentPayload(onProgress = () => {}) {
   };
 }
 
-async function buildLucidHtmlPayload(onProgress = () => {}) {
-  const payloadResult = await buildLucidContentPayload(onProgress);
+async function buildLucidHtmlPayload(onProgress = () => {}, scope = null) {
+  const payloadResult = await buildLucidContentPayload(onProgress, scope);
   const payloadJson = JSON.stringify(payloadResult.contentPayload);
   const escapedPayload = escapeHtmlAttr(payloadJson);
   const plainText = buildLucidPlainTextFromItems(payloadResult.preparedItems || []);
@@ -4717,23 +4780,30 @@ async function copyPreviewPng() {
   showToast('Copied PNG preview to clipboard');
 }
 
-async function copyLucidchartAsset() {
+async function copyLucidchartAsset(scope = null, onStatus = null) {
   try {
     const COPY_PROGRESS_TOAST_MS = 60000;
+    const report = message => {
+      if (onStatus) {
+        onStatus(message);
+      } else {
+        showToast(message, COPY_PROGRESS_TOAST_MS);
+      }
+    };
     const progress = (() => {
       let lastAt = 0;
       let lastMessage = '';
       return message => {
         const now = Date.now();
         if (message !== lastMessage || now - lastAt > 450) {
-          showToast(message, COPY_PROGRESS_TOAST_MS);
+          report(message);
           lastMessage = message;
           lastAt = now;
         }
       };
     })();
     progress('Preparing Lucid copy…');
-    const lucidPayload = await buildLucidHtmlPayload(progress);
+    const lucidPayload = await buildLucidHtmlPayload(progress, scope);
     const lucidHtml = lucidPayload.html;
     const plainText = lucidPayload.plainText;
     if (!lucidHtml || lucidHtml.length < 80) {
@@ -4751,8 +4821,8 @@ async function copyLucidchartAsset() {
     await navigator.clipboard.write([
       new ClipboardItem(primaryItemData)
     ]);
-    showToast('Copied Lucid payload (HTML). Paste with Ctrl+V.');
-    return;
+    report('Copied Lucid payload (HTML). Paste with Ctrl+V.');
+    return true;
   } catch (primaryError) {
     console.error('[copy-lucid] primary HTML payload write failed', primaryError);
     try {
@@ -4766,22 +4836,25 @@ async function copyLucidchartAsset() {
           'image/svg+xml': svgBlob
         })
       ]);
-      showToast('Lucid HTML blocked; copied SVG fallback.');
+      report('Lucid HTML blocked; copied SVG fallback.');
+      return true;
     } catch (svgError) {
       console.error('[copy-lucid] SVG fallback write failed', svgError);
       const pngBlob = await canvasToPngBlob();
       if (!pngBlob) {
-        showToast('Lucid copy failed');
-        return;
+        report('Lucid copy failed');
+        return false;
       }
       await navigator.clipboard.write([new ClipboardItem({
         'text/plain': new Blob(['PNG Grid fallback PNG copied.'], { type: 'text/plain' }),
         'text/html': new Blob(['<html><body><!--StartFragment--><p>PNG Grid PNG fallback copied.</p><!--EndFragment--></body></html>'], { type: 'text/html' }),
         [pngBlob.type]: pngBlob
       })]);
-      showToast('Clipboard fell back to static PNG.');
+      report('Clipboard fell back to static PNG.');
+      return true;
     }
   }
+  return false;
 }
 
 async function downloadPreviewPng() {
@@ -5121,6 +5194,8 @@ function handleOpenModalKeydown(event) {
       closeModal(els.lucidSendModal);
     } else if (openModalEl === els.lucidSettingsModal) {
       closeModal(els.lucidSettingsModal);
+    } else if (openModalEl === els.copyScopeModal) {
+      closeModal(els.copyScopeModal);
     }
     return true;
   }
@@ -6874,12 +6949,135 @@ function bindEvents() {
     }
   });
 
-  els.copyLucidBtn.addEventListener('click', async () => {
-    closeTopMenus();
+  let copyBatchChunks = [];
+  let copyBatchIndex = 0;
+  let copyBatchBusy = false;
+
+  function setCopyScopeAlert(message = '') {
+    if (els.copyScopeAlert) els.copyScopeAlert.textContent = message;
+  }
+
+  function updateCopyScopeDialog() {
+    if (!els.copyScopeModal) return;
+    const partial = els.copyScopePartialInput.checked;
+    const batch = els.copyBatchInput.checked;
+    els.copyScopePartialOptions.hidden = !partial;
+    els.copyScopeRowsInput.disabled = !partial;
+    els.copyScopeColsInput.disabled = !partial;
+    els.copyBatchInput.disabled = false;
+    els.copyBatchOptions.hidden = !batch;
+    els.copyScopePrevBtn.hidden = !batch || copyBatchIndex === 0;
+    els.copyScopeNextBtn.hidden = !batch || copyBatchIndex >= copyBatchChunks.length - 1;
+    els.copyScopeCopyBtn.textContent = batch
+      ? `Copy chunk ${copyBatchIndex + 1}`
+      : !partial ? 'Copy entire grid' : 'Copy selected range';
+    if (!partial) {
+      els.copyScopeHint.textContent = batch
+        ? `${state.rows} rows × ${state.cols} columns will be copied in row chunks.`
+        : `${state.rows} rows × ${state.cols} columns will be copied.`;
+    }
+    if (batch) {
+      els.copyBatchStatus.textContent = copyBatchChunks.length
+        ? `Chunk ${copyBatchIndex + 1} of ${copyBatchChunks.length}`
+        : 'Enter a valid scope to see chunks.';
+    }
+  }
+
+  function refreshCopyBatchChunks() {
     try {
-      await copyLucidchartAsset();
-    } catch {
-      showToast('Clipboard blocked by browser settings');
+      const scope = getLucidCopyScope();
+      const batchSize = clamp(Math.round(Number(els.copyBatchSizeInput.value) || 2), 1, 20);
+      copyBatchChunks = [];
+      for (let start = 0; start < scope.rows.length; start += batchSize) {
+        copyBatchChunks.push({ rows: scope.rows.slice(start, start + batchSize), cols: scope.cols });
+      }
+      copyBatchIndex = Math.min(copyBatchIndex, Math.max(0, copyBatchChunks.length - 1));
+      els.copyScopeHint.textContent = `${scope.rows.length} row${scope.rows.length === 1 ? '' : 's'} × ${scope.cols.length} column${scope.cols.length === 1 ? '' : 's'} selected.`;
+    } catch (error) {
+      copyBatchChunks = [];
+      els.copyScopeHint.textContent = error.message;
+    }
+    updateCopyScopeDialog();
+  }
+
+  function openCopyScopeDialog() {
+    els.copyScopeFullInput.checked = true;
+    els.copyScopePartialInput.checked = false;
+    els.copyScopeRowsInput.value = '';
+    els.copyScopeColsInput.value = '';
+    els.copyBatchInput.checked = false;
+    copyBatchChunks = [];
+    copyBatchIndex = 0;
+    setCopyScopeAlert('');
+    refreshCopyBatchChunks();
+    openModal(els.copyScopeModal, { focusTarget: els.copyScopeCopyBtn });
+  }
+
+  els.copyLucidBtn.addEventListener('click', () => {
+    closeTopMenus();
+    openCopyScopeDialog();
+  });
+  [els.copyScopeFullInput, els.copyScopePartialInput].forEach(input => {
+    input.addEventListener('change', () => {
+      copyBatchIndex = 0;
+      refreshCopyBatchChunks();
+    });
+  });
+  [els.copyScopeRowsInput, els.copyScopeColsInput, els.copyBatchSizeInput].forEach(input => {
+    input.addEventListener('input', refreshCopyBatchChunks);
+  });
+  els.copyBatchInput.addEventListener('change', () => {
+    copyBatchIndex = 0;
+    refreshCopyBatchChunks();
+  });
+  els.copyScopeCancelBtn.addEventListener('click', () => closeModal(els.copyScopeModal));
+  els.copyScopePrevBtn.addEventListener('click', () => {
+    copyBatchIndex = Math.max(0, copyBatchIndex - 1);
+    updateCopyScopeDialog();
+  });
+  els.copyScopeNextBtn.addEventListener('click', () => {
+    copyBatchIndex = Math.min(copyBatchChunks.length - 1, copyBatchIndex + 1);
+    updateCopyScopeDialog();
+  });
+  els.copyScopeCopyBtn.addEventListener('click', async () => {
+    if (copyBatchBusy) return;
+    const isBatchCopy = els.copyBatchInput.checked;
+    copyBatchBusy = true;
+    els.copyScopeCopyBtn.disabled = true;
+    els.copyScopePrevBtn.disabled = true;
+    els.copyScopeNextBtn.disabled = true;
+    try {
+      if (els.copyBatchInput.checked) {
+        els.copyScopeCopyBtn.textContent = `Preparing chunk ${copyBatchIndex + 1}…`;
+      }
+      const scope = els.copyBatchInput.checked
+        ? copyBatchChunks[copyBatchIndex]
+        : els.copyScopePartialInput.checked ? getLucidCopyScope() : null;
+      if (els.copyBatchInput.checked && !scope) throw new Error('Choose at least one row.');
+      const copied = await copyLucidchartAsset(scope, setCopyScopeAlert);
+      if (!copied) throw new Error('Clipboard write failed.');
+      if (els.copyBatchInput.checked) {
+        if (copyBatchIndex < copyBatchChunks.length - 1) {
+          copyBatchIndex += 1;
+          updateCopyScopeDialog();
+          setCopyScopeAlert(`Chunk ${copyBatchIndex} copied. Chunk ${copyBatchIndex + 1} is ready.`);
+        } else {
+          setCopyScopeAlert(`All ${copyBatchChunks.length} chunks copied.`);
+        }
+      } else {
+        closeModal(els.copyScopeModal);
+        showToast('Grid copied to clipboard. Paste with Ctrl+V.');
+      }
+    } catch (error) {
+      const message = error.message === 'Clipboard blocked' ? error.message : `Copy failed: ${error.message}`;
+      if (isBatchCopy) setCopyScopeAlert(message);
+      else showToast(message);
+    } finally {
+      copyBatchBusy = false;
+      els.copyScopeCopyBtn.disabled = false;
+      els.copyScopePrevBtn.disabled = false;
+      els.copyScopeNextBtn.disabled = false;
+      updateCopyScopeDialog();
     }
   });
 
@@ -7247,11 +7445,6 @@ function bindEvents() {
     state.showPageLabels = includePageLabels;
     savePageLabelVisibility(state.showPageLabels);
     renderAll();
-    if (!apiKey) {
-      closeLucidSettings();
-      showToast('Import and interface settings saved. Add an API key to save Lucid export settings.');
-      return;
-    }
     saveLucidSettings({
       apiKey,
       title,
@@ -7269,7 +7462,9 @@ function bindEvents() {
       customMaxDimension
     });
     closeLucidSettings();
-    showToast('Lucid API settings saved.');
+    showToast(apiKey
+      ? 'Lucid API settings saved.'
+      : 'Settings saved. Add an API key when you are ready to send to Lucid.');
   });
 
   els.previewCloseBtn.addEventListener('click', closePreviewModal);
@@ -7526,6 +7721,22 @@ function initElements() {
 
   els.copyPngBtn = document.getElementById('copyPngBtn');
   els.copyLucidBtn = document.getElementById('copyLucidBtn');
+  els.copyScopeModal = document.getElementById('copyScopeModal');
+  els.copyScopeFullInput = document.getElementById('copyScopeFullInput');
+  els.copyScopePartialInput = document.getElementById('copyScopePartialInput');
+  els.copyScopePartialOptions = document.getElementById('copyScopePartialOptions');
+  els.copyScopeRowsInput = document.getElementById('copyScopeRowsInput');
+  els.copyScopeColsInput = document.getElementById('copyScopeColsInput');
+  els.copyBatchInput = document.getElementById('copyBatchInput');
+  els.copyBatchOptions = document.getElementById('copyBatchOptions');
+  els.copyBatchSizeInput = document.getElementById('copyBatchSizeInput');
+  els.copyBatchStatus = document.getElementById('copyBatchStatus');
+  els.copyScopeHint = document.getElementById('copyScopeHint');
+  els.copyScopeAlert = document.getElementById('copyScopeAlert');
+  els.copyScopeCancelBtn = document.getElementById('copyScopeCancelBtn');
+  els.copyScopePrevBtn = document.getElementById('copyScopePrevBtn');
+  els.copyScopeCopyBtn = document.getElementById('copyScopeCopyBtn');
+  els.copyScopeNextBtn = document.getElementById('copyScopeNextBtn');
   els.downloadPngBtn = document.getElementById('downloadPngBtn');
   els.exportMenuBtn = document.getElementById('exportMenuBtn');
   els.exportMenu = document.getElementById('exportMenu');
