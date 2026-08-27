@@ -542,6 +542,9 @@ select {
   padding: calc(7px * var(--ui-scale)) calc(9px * var(--ui-scale));
 }
 
+#copyScopePartialInput, #copyScopeFullInput {
+  width: auto;
+}
 select option {
   color: #0c1320;
   background: #f2fbff;
@@ -1480,6 +1483,137 @@ input[type="number"]::-webkit-inner-spin-button {
   border: 1px solid var(--panel-border);
   border-radius: calc(8px * var(--ui-scale));
   background: var(--surface);
+}
+
+.modal-card.copy-scope-card {
+  width: min(92vw, 540px);
+  padding: calc(18px * var(--ui-scale));
+  gap: calc(12px * var(--ui-scale));
+}
+
+.copy-scope-card .modal-header {
+  padding-bottom: 2px;
+}
+
+.copy-scope-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  margin-top: 4px;
+  border: 1px solid var(--panel-border);
+  border-radius: calc(12px * var(--ui-scale));
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.copy-scope-option {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: calc(8px * var(--ui-scale));
+  background: transparent;
+  cursor: pointer;
+}
+
+.copy-scope-option input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.copy-scope-option:has(input:checked) {
+  border-color: rgba(95, 211, 255, 0.68);
+  background: rgba(95, 211, 255, 0.12);
+}
+
+.copy-scope-option span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.copy-scope-option strong {
+  font-size: calc(12px * var(--ui-scale));
+  line-height: 1.15;
+}
+
+.copy-scope-option small {
+  color: var(--muted);
+  font-size: calc(10px * var(--ui-scale));
+  line-height: 1.2;
+}
+
+.copy-scope-partial-options[hidden] {
+  display: none;
+}
+
+.copy-scope-partial-options {
+  padding: 12px;
+  border: 1px solid rgba(95, 211, 255, 0.2);
+  border-radius: calc(10px * var(--ui-scale));
+  background: rgba(95, 211, 255, 0.045);
+}
+
+.copy-scope-fields {
+  margin: 0;
+}
+
+.copy-batch-toggle {
+  margin-top: 12px;
+}
+
+.copy-batch-label {
+  display: grid;
+  gap: 2px;
+}
+
+.copy-batch-label small {
+  color: var(--muted);
+  font-size: calc(10px * var(--ui-scale));
+}
+
+.copy-batch-options {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: calc(10px * var(--ui-scale));
+  background: rgba(95, 211, 255, 0.06);
+}
+
+.copy-batch-options[hidden] {
+  display: none;
+}
+
+.copy-batch-status {
+  color: var(--accent-strong);
+  font-size: calc(12px * var(--ui-scale));
+  font-weight: 700;
+}
+
+.copy-scope-hint {
+  min-height: 1.25em;
+  margin: 0;
+}
+
+.copy-scope-alert {
+  min-height: 1.25em;
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--accent-strong);
+  border-radius: 4px;
+  background: rgba(134, 242, 190, 0.08);
+  color: var(--accent-strong);
+  font-size: calc(11px * var(--ui-scale));
+  font-weight: 700;
+}
+
+.copy-scope-card .modal-actions {
+  margin-top: 2px;
 }
 
 .lucid-doc-result-item {
