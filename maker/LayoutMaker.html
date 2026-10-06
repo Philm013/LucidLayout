@@ -8538,14 +8538,38 @@ ${pagesMarkup}
     }
   });
 
-  function loadPageBlueprintFromUrl() {
+  async function decodeCompressedPageBlueprint(payload64) {
+    if (!/^[A-Za-z0-9_-]+$/.test(payload64) || payload64.length % 4 === 1) {
+      throw new Error('Invalid compressed layout payload.');
+    }
+    const base64 = payload64.replace(/-/g, '+').replace(/_/g, '/');
+    const paddedBase64 = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const binary = atob(paddedBase64);
+    const compressedBytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    const decompressedStream = new Blob([compressedBytes]).stream()
+      .pipeThrough(new DecompressionStream('gzip'));
+    return await new Response(decompressedStream).text();
+  }
+
+  async function loadPageBlueprintFromUrl() {
     const url = new URL(window.location.href);
-    if (!url.searchParams.has('payload')) return;
+    const compressedPayload = url.searchParams.get('payload64');
+    const hasCompressedPayload = compressedPayload !== null;
+    if (!hasCompressedPayload && !url.searchParams.has('payload')) return;
+
+    if (hasCompressedPayload && typeof DecompressionStream !== 'function') {
+      showToast('Compressed layout links are not supported in this browser.');
+      return;
+    }
 
     try {
-      const blueprint = JSON.parse(url.searchParams.get('payload'));
+      const payload = hasCompressedPayload
+        ? await decodeCompressedPageBlueprint(compressedPayload)
+        : url.searchParams.get('payload');
+      const blueprint = JSON.parse(payload);
       const records = validatePageBlueprint(blueprint);
       commitImportedPages(records, 'new', blueprint.title);
+      url.searchParams.delete('payload64');
       url.searchParams.delete('payload');
       window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
     } catch (error) {
