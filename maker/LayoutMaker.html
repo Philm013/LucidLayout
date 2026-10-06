@@ -105,7 +105,8 @@
     header {
       background: var(--panel-bg);
       border-bottom: 1px solid var(--border-color);
-      min-height: 76px;
+      min-height: 64px;
+      flex: 0 0 auto;
       padding: 0.7rem 1.25rem;
       display: flex;
       justify-content: space-between;
@@ -121,7 +122,58 @@
       align-items: center;
       gap: 0.75rem;
       min-width: 0;
-      flex: 1 1 auto;
+      flex: 0 1 190px;
+    }
+
+    .workspace-navigation {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      flex: 1 1 280px;
+      min-width: 0;
+    }
+
+    .workspace-navigation-label {
+      flex: 0 0 auto;
+      color: var(--text-muted);
+      font-size: 0.68rem;
+      font-weight: 700;
+    }
+
+    .workspace-document-select {
+      flex: 0 1 330px;
+      width: 100%;
+      min-width: 0;
+      height: 38px;
+      padding: 0 0.65rem;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--text-dark);
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-overflow: ellipsis;
+    }
+
+    .workspace-document-select:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    .workspace-page-button {
+      flex: 0 0 auto;
+      min-height: 38px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.65rem;
+      flex: 0 0 auto;
+      min-width: 0;
     }
 
     .brand-mark {
@@ -150,82 +202,6 @@
       font-weight: 800;
       letter-spacing: 0.11em;
       line-height: 1;
-      text-transform: uppercase;
-    }
-
-    header h1 {
-      overflow: hidden;
-      color: var(--text-dark);
-      font-size: 1.16rem;
-      font-weight: 800;
-      line-height: 1.1;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .engine-badge {
-      flex: 0 1 auto;
-      max-width: 150px;
-      padding: 0.4rem 0.55rem;
-      border: 1px solid #bfdbfe;
-      border-radius: 7px;
-      background: #eff6ff;
-      color: var(--primary);
-      font-size: 0.63rem;
-      font-weight: 800;
-      line-height: 1.15;
-    }
-
-    .header-actions {
-      display: flex;
-      flex: 0 0 auto;
-      gap: 0.5rem;
-      align-items: center;
-      min-width: 0;
-    }
-
-    .toolbar-group {
-      display: flex;
-      gap: 0.3rem;
-      align-items: center;
-      padding: 0.25rem;
-      border: 1px solid #e2e8f0;
-      border-radius: 10px;
-      background: #f8fafc;
-    }
-
-    .toolbar-divider {
-      width: 1px;
-      height: 28px;
-      flex: 0 0 1px;
-      background: var(--border-color);
-    }
-
-    .toolbar-btn {
-      min-height: 38px;
-      padding: 0 0.7rem !important;
-      border: 1px solid transparent !important;
-      border-radius: 7px !important;
-      font-size: 0.77rem !important;
-      font-weight: 800 !important;
-      line-height: 1;
-      white-space: nowrap;
-      box-shadow: none;
-    }
-
-    .toolbar-btn:disabled {
-      cursor: not-allowed;
-      opacity: 0.45;
-    }
-
-    .help-dialog {
-      width: min(480px, calc(100vw - 2rem));
-      max-height: min(620px, calc(100vh - 2rem));
-      padding: 0;
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      color: var(--text-dark);
-      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
     }
 
     .help-dialog::backdrop {
@@ -363,6 +339,20 @@
       border-color: #86efac;
       background: #f0fdf4;
       color: #166534;
+    }
+
+    .preset-choice-actions.has-split .split-choice {
+      grid-column: 1 / -1;
+      border-color: #67e8f9;
+      background: #ecfeff;
+      color: #155e75;
+    }
+
+    .preset-choice-actions.has-split .split-choice:hover,
+    .preset-choice-actions.has-split .split-choice:focus-visible {
+      border-color: #0891b2;
+      background: #cffafe;
+      color: #164e63;
     }
 
     .preset-choice-cancel {
@@ -520,10 +510,11 @@
     .app-body {
       display: flex;
       flex: 1;
-      height: calc(100dvh - 64px);
+      height: auto;
       overflow: hidden;
       position: relative;
       min-width: 0;
+      min-height: 0;
     }
 
     /* Bottom Sheet Drag Handle (hidden on desktop) */
@@ -592,7 +583,8 @@
       overflow-x: auto;
       scrollbar-width: none;
       -webkit-overflow-scrolling: touch;
-      flex: 0 1 auto;
+      flex: 1 1 0;
+      min-width: 0;
     }
     .page-pills-scroll::-webkit-scrollbar { display: none; }
 
@@ -643,6 +635,231 @@
       box-sizing: border-box;
       gap: 0.2rem;
     }
+
+    .page-navigator {
+      display: flex;
+      flex: 0 0 276px;
+      flex-direction: column;
+      width: 276px;
+      min-height: 0;
+      background: #ffffff;
+      border-right: 1px solid var(--border-color);
+      color: var(--text-dark);
+      z-index: 60;
+    }
+
+    .page-navigator.is-closed { display: none; }
+
+    .page-nav-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.85rem 0.9rem 0.65rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .page-nav-title {
+      display: grid;
+      gap: 0.15rem;
+      min-width: 0;
+    }
+
+    .page-nav-title strong { font-size: 0.88rem; }
+    .page-nav-title span { color: var(--text-muted); font-size: 0.7rem; }
+
+    .page-nav-close {
+      display: grid;
+      flex: 0 0 32px;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border: 1px solid transparent;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .page-nav-close:hover,
+    .page-nav-close:focus-visible {
+      border-color: var(--border-color);
+      background: #f1f5f9;
+      color: var(--text-dark);
+      outline: none;
+    }
+
+    .page-nav-search {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.7rem 0.75rem 0.55rem;
+      padding: 0 0.65rem;
+      height: 36px;
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      color: var(--text-muted);
+    }
+
+    .page-nav-search:focus-within {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+    }
+
+    .page-nav-search input {
+      width: 100%;
+      min-width: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text-dark);
+      font: inherit;
+      font-size: 0.78rem;
+    }
+
+    .page-navigator-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 0.1rem 0.55rem 0.8rem;
+      overscroll-behavior: contain;
+    }
+
+    .page-nav-group + .page-nav-group { margin-top: 0.55rem; }
+
+    .page-nav-group-toggle {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      gap: 0.45rem;
+      padding: 0.5rem 0.45rem;
+      border: 0;
+      background: transparent;
+      color: #334155;
+      cursor: pointer;
+      text-align: left;
+      font-size: 0.7rem;
+      font-weight: 800;
+    }
+
+    .page-nav-group-toggle:hover { color: var(--primary-hover); }
+    .page-nav-group-toggle .group-count { margin-left: auto; color: var(--text-muted); font-weight: 600; }
+    .page-nav-group-pages { display: grid; gap: 2px; }
+    .page-nav-group.is-collapsed .page-nav-group-pages { display: none; }
+
+    .page-nav-item {
+      display: grid;
+      grid-template-columns: 2.1rem minmax(0, 1fr);
+      align-items: start;
+      width: 100%;
+      gap: 0.45rem;
+      padding: 0.48rem 0.45rem;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: transparent;
+      color: #334155;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      font-size: 0.73rem;
+      line-height: 1.3;
+    }
+
+    .page-nav-item:hover { background: #f1f5f9; }
+    .page-nav-item.active { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; font-weight: 700; }
+    .page-nav-number { color: var(--text-muted); font-size: 0.68rem; font-variant-numeric: tabular-nums; }
+    .page-nav-item.active .page-nav-number { color: #1d4ed8; }
+    .page-nav-empty { padding: 1rem 0.65rem; color: var(--text-muted); font-size: 0.76rem; }
+    .page-navigator-backdrop { display: none; }
+
+    .document-manager-dialog {
+      width: min(720px, calc(100vw - 2rem));
+      max-height: 88dvh;
+      padding: 0;
+      border: 1px solid var(--border-color);
+      border-radius: 9px;
+      color: var(--text-dark);
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+    }
+
+    .document-manager-content {
+      display: grid;
+      gap: 0.9rem;
+      max-height: 88dvh;
+      padding: 1.1rem;
+    }
+
+    .document-manager-list {
+      display: grid;
+      gap: 0.45rem;
+      max-height: min(62dvh, 560px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .document-manager-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.65rem 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .document-manager-row.active { border-left: 3px solid var(--primary); padding-left: 0.65rem; }
+
+    .document-manager-details {
+      display: grid;
+      min-width: 0;
+      gap: 0.4rem;
+    }
+
+    .document-manager-details small { color: var(--text-muted); font-size: 0.7rem; }
+
+    .document-manager-title-input {
+      width: 100%;
+      min-width: 0;
+      height: 36px;
+      padding: 0 0.6rem;
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      color: var(--text-dark);
+      font: inherit;
+      font-size: 0.8rem;
+    }
+
+    .document-manager-title-input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+    .document-manager-actions { display: flex; align-items: center; gap: 0.35rem; }
+
+    .document-manager-actions button {
+      display: inline-grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border: 1px solid var(--border-color);
+      border-radius: 5px;
+      background: #ffffff;
+      color: #334155;
+      cursor: pointer;
+    }
+
+    .document-manager-actions button:hover:not(:disabled),
+    .document-manager-actions button:focus-visible:not(:disabled) {
+      border-color: var(--primary);
+      background: #eff6ff;
+      color: var(--primary-hover);
+      outline: none;
+    }
+
+    .document-manager-actions button.danger:hover:not(:disabled),
+    .document-manager-actions button.danger:focus-visible:not(:disabled) {
+      border-color: #fca5a5;
+      background: #fef2f2;
+      color: #b91c1c;
+    }
+
+    .document-manager-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
     .page-bar-actions .btn-danger {
       display: inline-flex !important;
       align-items: center !important;
@@ -839,6 +1056,11 @@
     .dock-btn-action:hover {
       background: #e2e8f0;
       color: #0f172a;
+    }
+    .dock-btn-action[aria-pressed="true"] {
+      background: #dbeafe;
+      border-color: #2563eb;
+      color: #1d4ed8;
     }
     body.dark-theme .dock-btn-action {
       background: rgba(255, 255, 255, 0.1);
@@ -1058,23 +1280,24 @@
 
     @media (max-width: 768px) {
       header {
-        display: flex;
-        flex-direction: row;
-        flex-wrap: nowrap;
+        display: grid;
+        grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+        grid-template-rows: 36px 34px;
         align-items: center;
-        justify-content: space-between;
-        min-height: 52px;
-        height: 52px;
-        padding: 0 0.5rem;
+        min-height: 88px;
+        height: auto;
+        padding: 0.45rem 0.6rem;
         width: 100vw;
         max-width: 100vw;
         box-sizing: border-box;
-        overflow: hidden;
-        gap: 0.5rem;
+        overflow: visible;
+        gap: 0.3rem 0.5rem;
       }
 
       .brand-block {
-        flex: 0 0 auto;
+        grid-column: 1;
+        grid-row: 1;
+        flex: 0 1 auto;
         display: flex;
         align-items: center;
         gap: 0.35rem;
@@ -1095,9 +1318,26 @@
         white-space: nowrap;
       }
 
+      .workspace-navigation {
+        grid-column: 2;
+        grid-row: 1;
+        justify-content: flex-end;
+        gap: 0.3rem;
+        flex: 0 1 auto;
+      }
+
+      .workspace-navigation-label { display: none; }
+      .workspace-document-select { flex: 1 1 auto; height: 34px; font-size: 0.7rem; }
+      .workspace-page-button { width: 36px; min-height: 34px !important; height: 34px !important; padding: 0 !important; }
+
+      .document-manager-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+      .document-manager-actions { justify-content: flex-end; }
+
       .header-actions {
-        flex: 1 1 auto;
-        width: auto;
+        grid-column: 1 / -1;
+        grid-row: 2;
+        flex: 0 1 auto;
+        width: 100%;
         max-width: none;
         display: flex;
         flex-direction: row;
@@ -1150,8 +1390,37 @@
         width: 100vw;
         max-width: 100vw;
         overflow-x: hidden;
-        height: calc(100dvh - 56px - 60px);
+        height: auto;
+        min-height: 0;
+        flex: 1 1 auto;
       }
+
+      .page-navigator {
+        position: fixed;
+        top: 92px;
+        bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+        left: 0;
+        z-index: 260;
+        width: min(340px, 88vw);
+        box-shadow: 10px 0 28px rgba(15, 23, 42, 0.16);
+        transform: translateX(-105%);
+        transition: transform 0.2s ease;
+      }
+
+      .page-navigator.is-closed { display: flex; pointer-events: none; }
+      .page-navigator.is-open { transform: translateX(0); }
+      .page-navigator.is-open { transform: translateX(0); pointer-events: auto; }
+      .page-navigator-backdrop {
+        display: block;
+        position: fixed;
+        inset: 92px 0 calc(60px + env(safe-area-inset-bottom, 0px));
+        z-index: 250;
+        background: rgba(15, 23, 42, 0.38);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+      .page-navigator-backdrop.active { opacity: 1; pointer-events: auto; }
 
       .canvas-container {
         width: 100vw;
@@ -1732,6 +2001,32 @@
       z-index: 2;
     }
 
+    .panel-header-sticky {
+      position: relative;
+      flex: 0 0 auto;
+      padding: 0.9rem 1rem 0.65rem;
+      background: var(--panel-bg);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .panel-header-sticky > .section-title {
+      min-height: 1.65rem;
+      margin: 0;
+      padding: 0 3.25rem 0 0;
+      border-bottom: 0;
+    }
+
+    .panel-scroll-body {
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      padding: 0.85rem 1rem 1.25rem;
+    }
+
     .panel-reveal-handle {
       position: absolute;
       top: 50%;
@@ -2276,6 +2571,18 @@
     }
     .section-grid.library-drag-over { outline: 2px dashed var(--accent-green); outline-offset: 4px; }
 
+    .document-page.letter-portrait-page > .layout-section {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .document-page.letter-portrait-page .section-grid {
+      flex: 1 1 auto;
+      align-content: stretch;
+      grid-auto-rows: minmax(auto, 1fr);
+      min-height: 0;
+    }
     /* Grid Items */
     .grid-element {
       background: transparent;
@@ -2555,22 +2862,36 @@
       flex-direction: row !important;
       flex-wrap: nowrap !important;
       width: 100% !important;
-      align-items: center !important;
+      align-items: stretch !important;
       gap: 12px !important;
+      box-sizing: border-box;
+    }
+    .badge-content[data-layout="horizontal"] {
+      flex-direction: row !important;
+    }
+    .badge-content[data-layout="vertical"] {
+      flex-direction: column !important;
     }
 
     .badge-pill {
       flex: 0 0 auto !important;
-      max-width: fit-content !important;
+      max-width: 100% !important;
       line-height: 1.2 !important;
-      white-space: nowrap !important;
+      white-space: normal !important;
       display: inline-block !important;
+      overflow-wrap: anywhere;
+      box-sizing: border-box;
     }
 
     .badge-body {
       flex: 1 1 auto !important;
       min-width: 0 !important;
       line-height: 1.35 !important;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+    }
+    .badge-content[data-layout="vertical"] .badge-body {
+      width: 100% !important;
     }
 
     .svg-placeholder {
@@ -2614,6 +2935,39 @@
       text-align: left;
     }
     .rendered-table th { background: #f8fafc; font-weight: bold; }
+
+    .data-table-widget {
+      flex: 1 1 auto;
+      width: 100%;
+      min-width: 0;
+      min-height: 40px;
+      overflow: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: #ffffff;
+      color: var(--text-dark);
+    }
+    .data-table-widget table {
+      width: 100%;
+      height: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 0.82em;
+    }
+    .data-table-widget th,
+    .data-table-widget td {
+      border: 1px solid var(--border-color);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .data-table-widget th {
+      background: #eaf0f6;
+      color: inherit;
+      font-weight: 700;
+    }
 
     /* Interactive Resize Handles */
     .resizer { position: absolute; background: var(--primary); z-index: 10; }
@@ -2770,6 +3124,16 @@
       <h1>Layout Maker</h1>
     </div>
   </div>
+  <div class="workspace-navigation" role="group" aria-label="Document navigation">
+    <label class="workspace-navigation-label" for="activeDocumentSelect">Document</label>
+    <select id="activeDocumentSelect" class="workspace-document-select" aria-label="Active document"></select>
+    <button id="manageDocumentsBtn" type="button" class="btn btn-secondary toolbar-btn workspace-page-button" aria-label="Manage documents" title="Manage documents">
+      <iconify-icon icon="lucide:files"></iconify-icon><span class="toolbar-label">Manage</span>
+    </button>
+    <button id="togglePageNavigatorBtn" type="button" class="btn btn-secondary toolbar-btn workspace-page-button" aria-label="Toggle page navigation" aria-controls="pageNavigator" aria-expanded="true" title="Toggle page navigation">
+      <iconify-icon icon="lucide:panel-left"></iconify-icon><span class="toolbar-label">Pages</span>
+    </button>
+  </div>
   <nav class="header-actions" aria-label="Workspace actions">
     <div class="toolbar-group" aria-label="Layout actions">
       <button id="undoBtn" type="button" class="btn btn-secondary toolbar-btn" title="Undo last change" aria-label="Undo" disabled>
@@ -2789,8 +3153,18 @@
       <button id="exportPptBtn" type="button" class="btn btn-secondary toolbar-btn" title="Export layout options" aria-label="Export" onclick="openExportDialog('ppt')">
         <span class="toolbar-icon" aria-hidden="true">📥</span><span class="toolbar-label">Export</span>
       </button>
-      <button id="copyLucidBtn" type="button" class="btn btn-success toolbar-btn" title="Copy layout for Lucidchart">
+      <label class="sr-only" for="copyScaleSelect">Paste scale</label>
+      <select id="copyScaleSelect" class="toolbar-btn" aria-label="Paste scale" title="Set the size of copied pages" style="height:36px; min-width:78px; padding:0 0.4rem; border:1px solid var(--border-color); border-radius:6px; background:#ffffff; color:var(--text-dark);">
+        <option value="1">100%</option>
+        <option value="1.5" selected>150%</option>
+        <option value="2">200%</option>
+        <option value="2.5">250%</option>
+      </select>
+      <button id="copyLucidBtn" type="button" class="btn btn-success toolbar-btn" title="Copy the active page for Lucidchart" aria-label="Copy active page">
         <span class="toolbar-icon" aria-hidden="true">⧉</span><span class="toolbar-label">Copy</span>
+      </button>
+      <button id="copyAllPagesBtn" type="button" class="btn btn-success toolbar-btn" title="Copy every IMG and TPG page as two rows for Lucidchart" aria-label="Copy all pages as two rows">
+        <span class="toolbar-icon" aria-hidden="true">▤</span><span class="toolbar-label">2-row deck</span>
       </button>
     </div>
 
@@ -2810,12 +3184,15 @@
         <button type="button" class="dropdown-item" onclick="openHelp(); closeHeaderMenu();"><iconify-icon icon="lucide:help-circle"></iconify-icon> Help &amp; Guide</button>
         <button type="button" class="dropdown-item" onclick="openSettings(); closeHeaderMenu();"><iconify-icon icon="lucide:key"></iconify-icon> Unsplash / Pexels Keys</button>
         <div style="height:1px; background:#e2e8f0; margin:0.3rem 0;"></div>
+        <button type="button" id="importPrototypePagesBtn" class="dropdown-item"><iconify-icon icon="lucide:file-up"></iconify-icon> Import page blueprint JSON</button>
         <button type="button" class="dropdown-item" onclick="exportStandaloneHTML(); closeHeaderMenu();"><iconify-icon icon="lucide:globe"></iconify-icon> Export Standalone HTML</button>
         <button type="button" id="clearCanvasBtn" class="dropdown-item danger" onclick="closeHeaderMenu();"><iconify-icon icon="lucide:trash-2"></iconify-icon> Clear Canvas</button>
       </div>
     </div>
   </nav>
 </header>
+
+<input id="prototypePagesFileInput" type="file" accept=".json,application/json" hidden>
 
 <div class="app-body">
 
@@ -2875,6 +3252,14 @@
     <div class="lib-item" draggable="true" data-preset-name="peerReviewWorkshop" onclick="selectPreset('peerReviewWorkshop')"><span>🤝 Peer Review Workshop</span></div>
     <div class="lib-item" draggable="true" data-preset-name="threeDimensionalCheck" onclick="selectPreset('threeDimensionalCheck')"><span>📐 3D Learning Check</span></div>
     <div class="lib-item" draggable="true" data-preset-name="anchoredAssessment" onclick="selectPreset('anchoredAssessment')"><span>🎯 Anchored Assessment</span></div>
+
+    <div class="lib-item" draggable="true" data-preset-name="overviewProgressionTemplate" onclick="selectPreset('overviewProgressionTemplate')"><span>📚 Overview &amp; TEKS Progression</span></div>
+    <div class="lib-item" draggable="true" data-preset-name="scienceBackgroundTemplate" onclick="selectPreset('scienceBackgroundTemplate')"><span>🔎 Science Background &amp; Big Idea</span></div>
+    <div class="lib-item" draggable="true" data-preset-name="vocabularyGlossaryTemplate" onclick="selectPreset('vocabularyGlossaryTemplate')"><span>🗂️ Vocabulary &amp; Glossary Planning</span></div>
+    <div class="lib-item" draggable="true" data-preset-name="lessonOverviewLaunchTemplate" onclick="selectPreset('lessonOverviewLaunchTemplate')"><span>🚦 Lesson Overview &amp; Launch</span></div>
+    <div class="lib-item" draggable="true" data-preset-name="threeDimensionalExpectationsTemplate" onclick="selectPreset('threeDimensionalExpectationsTemplate')"><span>🧭 Performance Expectations Map</span></div>
+    <div class="lib-item" draggable="true" data-preset-name="weeklyLessonMapTemplate" onclick="selectPreset('weeklyLessonMapTemplate')"><span>🗓️ Weekly Lesson Map</span></div>
+    <div class="lib-item" draggable="true" data-preset-name="lessonPreplanningOverviewTemplate" onclick="selectPreset('lessonPreplanningOverviewTemplate')"><span>🧰 Lesson Preplanning Overview</span></div>
 	</div>
 
 	<div class="library-subtitle">Saved presets</div>
@@ -2887,6 +3272,24 @@
     <div class="library-grid" id="customLibraryList"></div>
     </div>
   </div>
+
+  <aside id="pageNavigator" class="page-navigator is-open" aria-label="Page navigation">
+    <div class="page-nav-heading">
+      <div class="page-nav-title">
+        <strong>Pages</strong>
+        <span id="pageNavigatorCount">0 pages</span>
+      </div>
+      <button id="closePageNavigatorBtn" type="button" class="page-nav-close" aria-label="Close page navigation" title="Close page navigation">
+        <iconify-icon icon="lucide:x"></iconify-icon>
+      </button>
+    </div>
+    <label class="page-nav-search">
+      <iconify-icon icon="lucide:search" aria-hidden="true"></iconify-icon>
+      <input id="pageNavigatorSearch" type="search" placeholder="Find a page" aria-label="Search document pages">
+    </label>
+    <div id="pageNavigatorList" class="page-navigator-list"></div>
+  </aside>
+  <div id="pageNavigatorBackdrop" class="page-navigator-backdrop" aria-hidden="true"></div>
 
   <div class="canvas-container" id="canvasContainer">
     <div id="canvasViewport" class="canvas-viewport">
@@ -2907,6 +3310,7 @@
           <button type="button" class="btn btn-secondary btn-sm" onclick="moveActivePage(1)" title="Move Page Right">➡️</button>
           <button type="button" class="btn btn-danger btn-sm" onclick="deleteActivePage()" title="Delete Active Page">🗑️</button>
         </div>
+        <div id="pagePillsContainer" class="page-pills-scroll" role="group" aria-label="Pages in this document"></div>
         <div class="canvas-zoom-controls" aria-label="Canvas zoom controls">
           <button id="zoomOutBtn" type="button" aria-label="Zoom out" title="Zoom out">−</button>
           <span id="zoomLevelLabel" class="canvas-zoom-label">100%</span>
@@ -2947,6 +3351,9 @@
           </button>
           <button type="button" class="dock-icon-btn dock-btn-action" onclick="moveSelectedElement(1)" title="Move Down" aria-label="Move Down">
             <iconify-icon icon="lucide:chevron-down"></iconify-icon>
+          </button>
+          <button type="button" id="swapSelectedElementBtn" class="dock-icon-btn dock-btn-action" onclick="startSelectedElementSwap()" title="Swap widget" aria-label="Swap widget" aria-pressed="false">
+            <iconify-icon icon="lucide:replace"></iconify-icon>
           </button>
           <button type="button" class="dock-icon-btn dock-btn-primary" onclick="openSelectedElementInspector()" title="Edit Properties" aria-label="Edit Properties">
             <iconify-icon icon="lucide:sliders-horizontal"></iconify-icon>
@@ -3108,6 +3515,25 @@
           <label for="inpBadgeBody">Standard Body Text</label>
           <textarea id="inpBadgeBody" class="form-control" rows="4"></textarea>
         </div>
+        <div class="row-2">
+          <div class="form-group">
+            <label for="inpBadgeLayout">Badge layout</label>
+            <select id="inpBadgeLayout" class="form-control">
+              <option value="auto">Page default</option>
+              <option value="horizontal">Side by side</option>
+              <option value="vertical">Above and below</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="inpBadgeAlign">Pill alignment</label>
+            <select id="inpBadgeAlign" class="form-control">
+              <option value="start">Start (left / top)</option>
+              <option value="center">Center</option>
+              <option value="end">End (right / bottom)</option>
+            </select>
+            <small>Left/center/right when stacked; top/center/bottom side by side.</small>
+          </div>
+        </div>
         <div id="badgeAppearanceGroup">
           <div class="row-2">
             <div class="form-group">
@@ -3167,6 +3593,17 @@
           <textarea id="inpAccordionBody" class="form-control" rows="4"></textarea>
         </div>
       </div>
+      <div id="dataTableTextGroup" style="display:none;">
+        <div class="form-group">
+          <label for="inpTableTitle">Table title</label>
+          <input type="text" id="inpTableTitle" class="form-control">
+        </div>
+        <div class="form-group">
+          <label for="inpTableBody">Table data</label>
+          <textarea id="inpTableBody" class="form-control" rows="7" aria-describedby="tableDataHelp" spellcheck="false"></textarea>
+          <small id="tableDataHelp">One row per line. Separate cells with | or tabs; the first row is the header.</small>
+        </div>
+      </div>
       <div class="row-2">
         <div class="form-group">
           <label for="inpColSpan">Cols (1-12)</label>
@@ -3176,6 +3613,15 @@
           <label for="inpRowSpan">Rows (Height)</label>
           <input type="number" id="inpRowSpan" class="form-control" min="1" max="20">
         </div>
+      </div>
+      <div class="form-group">
+        <label for="inpVerticalAlign">Vertical content alignment</label>
+        <select id="inpVerticalAlign" class="form-control">
+          <option value="auto">Automatic</option>
+          <option value="top">Top</option>
+          <option value="center">Center</option>
+          <option value="bottom">Bottom</option>
+        </select>
       </div>
 
       <div id="accordionGroup" class="form-group" style="display:none;">
@@ -3265,7 +3711,32 @@
         </div>
         <div class="form-group">
           <label for="inpFontSize">Font Size (px)</label>
-          <input type="number" id="inpFontSize" class="form-control">
+          <select id="inpFontSize" class="form-control">
+            <option value="auto">Auto</option>
+            <option value="1">1 px</option>
+            <option value="8">8 px</option>
+            <option value="9">9 px</option>
+            <option value="10">10 px</option>
+            <option value="11">11 px</option>
+            <option value="12">12 px</option>
+            <option value="13">13 px</option>
+            <option value="14">14 px</option>
+            <option value="15">15 px</option>
+            <option value="16">16 px</option>
+            <option value="18">18 px</option>
+            <option value="20">20 px</option>
+            <option value="22">22 px</option>
+            <option value="24">24 px</option>
+            <option value="25">25 px</option>
+            <option value="26">26 px</option>
+            <option value="28">28 px</option>
+            <option value="32">32 px</option>
+            <option value="36">36 px</option>
+            <option value="40">40 px</option>
+            <option value="48">48 px</option>
+            <option value="64">64 px</option>
+            <option value="72">72 px</option>
+          </select>
         </div>
       </div>
       <div class="form-group toggle-field">
@@ -3279,11 +3750,11 @@
         <label class="toggle-control" for="inpElementBorderEnabled">
           <input type="checkbox" id="inpElementBorderEnabled">
           <span class="toggle-switch" aria-hidden="true"></span>
-          <span>Use element border</span>
+          <span id="elementBorderLabel">Use element border</span>
         </label>
       </div>
       <div class="form-group">
-        <label for="inpBorderColor">Element Border Color</label>
+        <label for="inpBorderColor">Element / Widget Border Color</label>
         <input type="color" id="inpBorderColor" class="form-control" style="height:35px; padding:2px;">
       </div>
       <div class="row-2">
@@ -3373,7 +3844,8 @@
       <h2 id="presetChoiceTitle">What should happen to the current layout?</h2>
       <p id="presetChoiceDescription">Choose whether to start with this spread or add it below your existing sections.</p>
     </div>
-    <div class="preset-choice-actions">
+    <div class="preset-choice-actions" id="presetChoiceActions">
+      <button id="splitBlueprintBtn" type="button" class="split-choice" hidden>Create IMG and TPG documents</button>
       <button id="replacePresetBtn" type="button">Replace current layout</button>
       <button id="appendPresetBtn" type="button" class="append-choice">Append as new section(s)</button>
     </div>
@@ -3391,6 +3863,21 @@
     </div>
     <div style="margin-top:1rem; display:flex; justify-content:flex-end;">
       <button type="button" class="btn btn-secondary" onclick="closeMobilePageSwitcher()">Close</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="documentManagerDialog" class="settings-dialog document-manager-dialog" aria-labelledby="documentManagerTitle">
+  <div class="settings-content document-manager-content">
+    <div class="help-dialog-header">
+      <div>
+        <h2 id="documentManagerTitle">Manage documents</h2>
+      </div>
+      <button type="button" class="help-close" aria-label="Close document manager" onclick="closeDocumentManager()">×</button>
+    </div>
+    <div id="documentManagerList" class="document-manager-list"></div>
+    <div style="display:flex; justify-content:flex-end;">
+      <button type="button" class="btn btn-secondary" onclick="closeDocumentManager()">Done</button>
     </div>
   </div>
 </dialog>
@@ -3578,7 +4065,7 @@
 
 <!-- Mobile Bottom Navigation Bar -->
 <nav class="mobile-bottom-nav" aria-label="Mobile workspace navigation">
-  <button id="mobileNavPages" type="button" class="mobile-nav-item" onclick="openMobilePageSwitcher()">
+  <button id="mobileNavPages" type="button" class="mobile-nav-item" onclick="setPageNavigatorOpen(true)">
     <span class="nav-icon" aria-hidden="true">📄</span>
     <span id="mobileNavPageLabel">Page 1/1</span>
   </button>
@@ -3688,20 +4175,39 @@
     if (event.target === event.currentTarget) closeHelp();
   });
 
+  let pendingImportedPages = null;
+  let pendingBlueprintTitle = '';
+
   function closePresetChoice() {
     document.getElementById('presetChoiceDialog')?.close();
     pendingPresetSections = null;
+    pendingImportedPages = null;
+    pendingBlueprintTitle = '';
+    document.getElementById('splitBlueprintBtn').hidden = true;
+    document.getElementById('presetChoiceActions').classList.remove('has-split');
+    document.getElementById('presetChoiceTitle').textContent = 'What should happen to the current layout?';
+    document.getElementById('presetChoiceDescription').textContent = 'Choose whether to start with this spread or add it below your existing sections.';
+    document.getElementById('replacePresetBtn').textContent = 'Replace current layout';
+    document.getElementById('appendPresetBtn').textContent = 'Append as new section(s)';
   }
 
   function choosePresetInsertMode(mode) {
+    if (pendingImportedPages) {
+      const nextPages = pendingImportedPages;
+      const blueprintTitle = pendingBlueprintTitle;
+      closePresetChoice();
+      commitImportedPages(nextPages, mode, blueprintTitle);
+      return;
+    }
     if (!pendingPresetSections) return;
     const nextSections = pendingPresetSections;
     closePresetChoice();
     commitPresetSections(nextSections, mode);
   }
 
-  document.getElementById('replacePresetBtn').onclick = () => choosePresetInsertMode('replace');
+  document.getElementById('replacePresetBtn').onclick = () => choosePresetInsertMode(pendingImportedPages ? 'new' : 'replace');
   document.getElementById('appendPresetBtn').onclick = () => choosePresetInsertMode('append');
+  document.getElementById('splitBlueprintBtn').onclick = () => choosePresetInsertMode('split');
   document.getElementById('cancelPresetBtn').onclick = closePresetChoice;
   document.getElementById('presetChoiceDialog').addEventListener('click', event => {
     if (event.target === event.currentTarget) closePresetChoice();
@@ -3712,6 +4218,7 @@
   let selectedSectionId = null;
   let selectedElementId = null;
   let selectedElementIds = [];
+  let swappingSelectedElement = false;
   let draggedEl = null;
   let draggedElements = [];
   let draggedLibraryType = null;
@@ -3765,6 +4272,7 @@
     selectedSectionId = null;
     selectedElementId = null;
     selectedElementIds = [];
+    swappingSelectedElement = false;
     updateMobileDockBar();
     if (shouldRender) {
       renderLayout();
@@ -4021,6 +4529,12 @@
     const dockBar = document.getElementById('mobileElementDockBar');
     if (!dockBar) return;
     const info = getSelectedElementInfo();
+    if (!info) swappingSelectedElement = false;
+    const swapButton = document.getElementById('swapSelectedElementBtn');
+    if (swapButton) {
+      swapButton.setAttribute('aria-pressed', String(swappingSelectedElement));
+      swapButton.title = swappingSelectedElement ? 'Cancel widget swap' : 'Swap widget';
+    }
     if (info) {
       dockBar.classList.add('visible');
       const colVal = document.getElementById('dockColVal');
@@ -4032,7 +4546,37 @@
     }
   }
 
-  window.addEventListener('resize', syncCanvasScale);
+  function startSelectedElementSwap() {
+    if (swappingSelectedElement) {
+      swappingSelectedElement = false;
+      updateMobileDockBar();
+      showToast('Widget swap canceled.');
+      return;
+    }
+    if (!getSelectedElementInfo()) {
+      showToast('Select a widget to swap.');
+      return;
+    }
+    swappingSelectedElement = true;
+    setPanelOpen('sidebar', true);
+    updateMobileDockBar();
+    showToast('Choose a replacement widget from the library.');
+  }
+
+  window.addEventListener('resize', () => {
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile !== pageNavigatorViewportMobile) {
+      pageNavigatorViewportMobile = isMobile;
+      if (isMobile) {
+        panelState.sidebar.open = false;
+        panelState.inspector.open = false;
+        syncPanelState('sidebar');
+        syncPanelState('inspector');
+      }
+      setPageNavigatorOpen(!isMobile);
+    }
+    syncCanvasScale();
+  });
   if (window.ResizeObserver) new ResizeObserver(syncCanvasScale).observe(canvasContainer);
   document.getElementById('zoomOutBtn').onclick = () => changeCanvasZoom(-0.1);
   document.getElementById('zoomInBtn').onclick = () => changeCanvasZoom(0.1);
@@ -4044,9 +4588,10 @@
   const PRESET_STORAGE_KEY = 'lucidLayoutPresets';
   const LIBRARY_SET_STORAGE_KEY = 'lucidLayoutElementSets';
   const WORKING_LAYOUT_STORAGE_KEY = 'lucidLayoutWorkingLayout';
+  const DOCUMENT_COLLECTION_STORAGE_KEY = 'lucidLayoutDocuments';
   const MAX_HISTORY_ENTRIES = 100;
 
-  const BUILT_IN_LIBRARY_SETS = {
+  const BUILT_IN_LIBRARY_CATALOG = {
     phenomenonLaunchPack: {
       builtIn: true,
       elements: [
@@ -4057,6 +4602,82 @@
         { type: 'badge', colSpan: 12, rowSpan: 1, text: '[Driving Question]\nWrite a class question that can guide investigation and explanation.', badgeText: '[Driving Question]', badgeBody: 'Write a class question that can guide investigation and explanation.', fontSize: 14, fill: '#1e40af', textColor: '#1e40af' }
       ]
     },
+      overviewProgressionTemplate: ['Overview & TEKS Progression', [
+        { type: 'heading', colSpan: 12, rowSpan: 1, text: '[Lesson title] | Lesson Overview', fontSize: 25, fill: '#ffffff', textColor: '#17324d' },
+        { type: 'callout', colSpan: 8, rowSpan: 2, text: 'ESSENTIAL QUESTION\n[Add the approved essential question.]', fontSize: 12, fill: '#eaf4fa', textColor: '#1e3a5a', hasBackground: true },
+        { type: 'imageCard', colSpan: 4, rowSpan: 4, text: 'Approved lesson visual / caption', fontSize: 11, fill: '#e2e8f0', textColor: '#334155', showCaption: true },
+        { type: 'callout', colSpan: 8, rowSpan: 2, text: 'LESSON OBJECTIVE\n[Add what students will know and do.]', fontSize: 11, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' },
+        { type: 'callout', colSpan: 12, rowSpan: 1, text: 'LEARNING PROGRESSION | Prior learning → grade-level bridge → target → next learning', fontSize: 11, fill: '#eaf4fa', textColor: '#24445a', hasBackground: true },
+        { type: 'callout', colSpan: 2, rowSpan: 3, text: 'PRIOR\n[Grade / concept]', fontSize: 10, fill: '#f3f7fa', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#cbdde8' },
+        { type: 'callout', colSpan: 2, rowSpan: 3, text: '[Bridge\nstandard]', fontSize: 10, fill: '#f3f7fa', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#cbdde8' },
+        { type: 'callout', colSpan: 2, rowSpan: 3, text: '[Developing\nunderstanding]', fontSize: 10, fill: '#f3f7fa', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#cbdde8' },
+        { type: 'callout', colSpan: 3, rowSpan: 3, text: 'TARGET\n[Performance expectation / grade-level goal]', fontSize: 10, fill: '#dff1fb', textColor: '#183b63', hasBackground: true, hasBorder: true, borderColor: '#1697d5' },
+        { type: 'callout', colSpan: 3, rowSpan: 3, text: 'NEXT\n[Later learning / transfer]', fontSize: 10, fill: '#f3f7fa', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#cbdde8' },
+        { type: 'callout', colSpan: 12, rowSpan: 2, text: 'UNPACK THE STANDARD\n[Clarify the cognitive verb, content, evidence of learning, and planning implications.]', fontSize: 11, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' }
+      ]],
+      scienceBackgroundTemplate: ['Science Background & Big Idea', [
+        { type: 'heading', colSpan: 12, rowSpan: 1, text: 'Science Background', fontSize: 25, fill: '#ffffff', textColor: '#17324d' },
+        { type: 'callout', colSpan: 7, rowSpan: 4, text: '[Core concept or system]\nSummarize the source-supported science teachers need to understand before teaching. Distinguish prior knowledge from new learning.', fontSize: 11, fill: '#ffffff', textColor: '#263746', hasBackground: true },
+        { type: 'imageCard', colSpan: 5, rowSpan: 4, text: 'Approved source visual; add alt text and citation.', fontSize: 10, fill: '#e2e8f0', textColor: '#334155', showCaption: true },
+        { type: 'callout', colSpan: 7, rowSpan: 3, text: 'CONNECT TO THE BIG IDEA\n[Explain how the lesson concept connects to the unit storyline and later learning.]', fontSize: 11, fill: '#eff7fa', textColor: '#24445a', hasBackground: true },
+        { type: 'imageCard', colSpan: 5, rowSpan: 4, text: 'Second approved source visual; add caption and alt text.', fontSize: 10, fill: '#e2e8f0', textColor: '#334155', showCaption: true },
+        { type: 'callout', colSpan: 7, rowSpan: 2, text: 'PLANNING BOUNDARY\nWhat to keep in teacher background; what not to frontload for students.', fontSize: 10, fill: '#fff8e6', textColor: '#6b4a14', hasBackground: true },
+        { type: 'callout', colSpan: 12, rowSpan: 2, text: 'SOURCE / REVIEW NOTES\n[Document source, asset dependencies, and any content requiring specialist verification.]', fontSize: 10, fill: '#f3f7fa', textColor: '#334155', hasBackground: true }
+      ]],
+      vocabularyGlossaryTemplate: ['Vocabulary & Glossary Planning', [
+        { type: 'heading', colSpan: 12, rowSpan: 1, text: 'Vocabulary & Question Glossary', fontSize: 25, fill: '#ffffff', textColor: '#17324d' },
+        { type: 'callout', colSpan: 12, rowSpan: 2, text: 'PURPOSE / USE\n[Identify lesson language, when students need it, and whether the source calls for a personal glossary, shared display, or both.]', fontSize: 11, fill: '#eaf4fa', textColor: '#24445a', hasBackground: true },
+        { type: 'callout', colSpan: 12, rowSpan: 5, text: 'LESSON LANGUAGE\nTerm | Source meaning / student use | Visual, example, or language support\n[Term] | [Meaning] | [Support]\n[Term] | [Meaning] | [Support]\n[Term] | [Meaning] | [Support]', fontSize: 11, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#1697d5' },
+        { type: 'callout', colSpan: 6, rowSpan: 3, text: 'QUESTION / WORD COLLECTION\n[Prompts that move students from observations to their own questions or vocabulary entries.]', fontSize: 10, fill: '#f3f7fa', textColor: '#263746', hasBackground: true },
+        { type: 'callout', colSpan: 6, rowSpan: 3, text: 'ACCESS & TEACHING MOVES\n[Sentence frames, home language, gestures, sketches, visuals, and when to revisit terms.]', fontSize: 10, fill: '#f3f7fa', textColor: '#263746', hasBackground: true },
+        { type: 'callout', colSpan: 12, rowSpan: 2, text: 'BUILD / REVISIT\n[Plan how student-generated words and questions are organized, saved, and revisited.]', fontSize: 10, fill: '#fff8e6', textColor: '#6b4a14', hasBackground: true }
+      ]],
+      lessonOverviewLaunchTemplate: ['Lesson Overview & Launch', [
+        { type: 'heading', colSpan: 12, rowSpan: 1, text: '[Lesson title] | Planning Overview', fontSize: 25, fill: '#ffffff', textColor: '#17324d' },
+        { type: 'callout', colSpan: 7, rowSpan: 3, text: 'LESSON OVERVIEW\n[Purpose, phenomenon or problem, and what students will do.]', fontSize: 11, fill: '#eaf4fa', textColor: '#24445a', hasBackground: true },
+        { type: 'imageCard', colSpan: 5, rowSpan: 4, text: 'Approved launch visual or source asset; include caption and alt text.', fontSize: 10, fill: '#e2e8f0', textColor: '#334155', showCaption: true },
+        { type: 'callout', colSpan: 7, rowSpan: 2, text: 'ESSENTIAL QUESTION / OBJECTIVES\n[Add approved question and learning objectives.]', fontSize: 10, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' },
+        { type: 'callout', colSpan: 12, rowSpan: 1, text: 'LESSON LAUNCH | PREPARE', fontSize: 12, fill: '#168fc8', textColor: '#ffffff', hasBackground: true },
+        { type: 'callout', colSpan: 6, rowSpan: 4, text: 'MATERIALS / SETUP\n[List what to prepare, distribute, display, and confirm before students arrive.]', fontSize: 10, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' },
+        { type: 'callout', colSpan: 6, rowSpan: 4, text: 'OPENING MOVES\n[Sequence the opening, teacher prompt, likely response, and first transition.]', fontSize: 10, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' },
+        { type: 'callout', colSpan: 12, rowSpan: 2, text: 'ACCESS / CONTINGENCY\n[Read-aloud, language and participation options, safety cues, and source-supported short-on-time alternative.]', fontSize: 10, fill: '#fff8e6', textColor: '#6b4a14', hasBackground: true }
+      ]],
+      threeDimensionalExpectationsTemplate: ['Performance Expectations Map', [
+        { type: 'heading', colSpan: 12, rowSpan: 1, text: 'Building to the Performance Expectations', fontSize: 24, fill: '#ffffff', textColor: '#17324d' },
+        { type: 'callout', colSpan: 12, rowSpan: 2, text: 'PERFORMANCE EXPECTATION\n[Add the approved PE and clarification statement. Identify what counts as evidence in this lesson.]', fontSize: 11, fill: '#eaf4fa', textColor: '#24445a', hasBackground: true },
+        { type: 'callout', colSpan: 4, rowSpan: 5, text: 'SEP | SCIENCE & ENGINEERING PRACTICE\n[Code and exact meaning]\n\nLesson evidence: [What students do or produce.]', fontSize: 10, fill: '#e6effb', textColor: '#264568', hasBackground: true, hasBorder: true, borderColor: '#a8bfdd' },
+        { type: 'callout', colSpan: 4, rowSpan: 5, text: 'DCI | DISCIPLINARY CORE IDEA\n[Code and exact meaning]\n\nLesson evidence: [What students figure out.]', fontSize: 10, fill: '#fff0df', textColor: '#68461f', hasBackground: true, hasBorder: true, borderColor: '#e4bd94' },
+        { type: 'callout', colSpan: 4, rowSpan: 5, text: 'CCC | CROSSCUTTING CONCEPT\n[Code and exact meaning]\n\nLesson lens: [Pattern, system, cause/effect, or other connection.]', fontSize: 10, fill: '#eaf3e8', textColor: '#2e5030', hasBackground: true, hasBorder: true, borderColor: '#b8d1b0' },
+        { type: 'callout', colSpan: 12, rowSpan: 3, text: 'UNPACK / ALIGN\n[Prior learning] → [grade-level target] → [later learning]\nPlanning implications: [What to elicit now, what evidence to notice, and what explanation belongs later.]', fontSize: 10, fill: '#f3f7fa', textColor: '#263746', hasBackground: true }
+      ]],
+      weeklyLessonMapTemplate: ['Weekly Lesson Map', [
+        { type: 'heading', colSpan: 12, rowSpan: 1, text: '[Lesson title] | Weekly Lesson Map', fontSize: 24, fill: '#ffffff', textColor: '#17324d' },
+        { type: 'callout', colSpan: 8, rowSpan: 2, text: 'ESSENTIAL QUESTION / OBJECTIVE\n[Add lesson question and student learning objective.]', fontSize: 10, fill: '#eaf4fa', textColor: '#24445a', hasBackground: true },
+        { type: 'callout', colSpan: 4, rowSpan: 2, text: '[Standard / course code]', fontSize: 10, fill: '#234a83', textColor: '#ffffff', hasBackground: true },
+        { type: 'callout', colSpan: 2, rowSpan: 1, text: 'DAY / TIME', fontSize: 9, fill: '#dcebf3', textColor: '#24445a', hasBackground: true },
+        { type: 'callout', colSpan: 3, rowSpan: 1, text: 'PLAN', fontSize: 10, fill: '#8c9297', textColor: '#ffffff', hasBackground: true },
+        { type: 'callout', colSpan: 4, rowSpan: 1, text: 'TEACH', fontSize: 10, fill: '#8c9297', textColor: '#ffffff', hasBackground: true },
+        { type: 'callout', colSpan: 3, rowSpan: 1, text: 'ASSESS', fontSize: 10, fill: '#8c9297', textColor: '#ffffff', hasBackground: true },
+        { type: 'callout', colSpan: 12, rowSpan: 1, text: '[PHASE 1]', fontSize: 10, fill: '#dcebf3', textColor: '#24445a', hasBackground: true },
+        { type: 'callout', colSpan: 2, rowSpan: 2, text: '[Day(s)]\n[Minutes]', fontSize: 9, fill: '#e8f2f8', textColor: '#24445a', hasBackground: true },
+        { type: 'callout', colSpan: 3, rowSpan: 2, text: '[Prepare / materials / resources]', fontSize: 9, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' },
+        { type: 'callout', colSpan: 4, rowSpan: 2, text: '[Teaching moves / prompts / activity]', fontSize: 9, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' },
+        { type: 'callout', colSpan: 3, rowSpan: 2, text: '[Evidence / look-fors / next step]', fontSize: 9, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' },
+        { type: 'callout', colSpan: 12, rowSpan: 1, text: '[PHASE 2]', fontSize: 10, fill: '#dcebf3', textColor: '#24445a', hasBackground: true },
+        { type: 'callout', colSpan: 2, rowSpan: 2, text: '[Day(s)]\n[Minutes]', fontSize: 9, fill: '#e8f2f8', textColor: '#24445a', hasBackground: true },
+        { type: 'callout', colSpan: 3, rowSpan: 2, text: '[Prepare / materials / resources]', fontSize: 9, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' },
+        { type: 'callout', colSpan: 4, rowSpan: 2, text: '[Teaching moves / prompts / activity]', fontSize: 9, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' },
+        { type: 'callout', colSpan: 3, rowSpan: 2, text: '[Evidence / look-fors / next step]', fontSize: 9, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' }
+      ]],
+      lessonPreplanningOverviewTemplate: ['Lesson Preplanning Overview', [
+        { type: 'heading', colSpan: 12, rowSpan: 1, text: '[Lesson title] | Preplanning Overview', fontSize: 24, fill: '#ffffff', textColor: '#17324d' },
+        { type: 'callout', colSpan: 12, rowSpan: 2, text: 'UNIT / ESSENTIAL QUESTION\n[Insert approved unit question, anchor, or central problem.]', fontSize: 11, fill: '#eaf4fa', textColor: '#24445a', hasBackground: true },
+        { type: 'callout', colSpan: 6, rowSpan: 3, text: 'PURPOSE & LEARNING\n[Lesson purpose, objectives, target standard, and prerequisite learning.]', fontSize: 10, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' },
+        { type: 'callout', colSpan: 6, rowSpan: 3, text: 'STORYLINE POSITION\n[What students figure out now, what remains unresolved, and the next lesson handoff.]', fontSize: 10, fill: '#ffffff', textColor: '#263746', hasBackground: true, hasBorder: true, borderColor: '#d2e1ea' },
+        { type: 'callout', colSpan: 6, rowSpan: 3, text: 'PREPARE / RESOURCES\n[Materials, room setup, handouts, linked assets, permissions, safety, and print alternatives.]', fontSize: 10, fill: '#f3f7fa', textColor: '#263746', hasBackground: true },
+        { type: 'callout', colSpan: 6, rowSpan: 3, text: 'PROTECT / SAVE\n[Uncertainty boundaries, staged materials, assessment evidence, and persistent artifacts.]', fontSize: 10, fill: '#fff8e6', textColor: '#6b4a14', hasBackground: true },
+        { type: 'callout', colSpan: 12, rowSpan: 2, text: 'PACING / CONTINGENCY\n[Two-day route, condensed route, protected essentials, and re-entry plan.]', fontSize: 10, fill: '#dcebf3', textColor: '#24445a', hasBackground: true }
+      ]],
     noticeWonderPack: {
       builtIn: true,
       elements: [
@@ -4140,7 +4761,15 @@
     }
   };
 
+  const BUILT_IN_LIBRARY_SETS = Object.fromEntries(
+    Object.entries(BUILT_IN_LIBRARY_CATALOG).filter(([, record]) => record && Array.isArray(record.elements))
+  );
+  const BUILT_IN_SCIENCE_PRESETS = Object.fromEntries(
+    Object.entries(BUILT_IN_LIBRARY_CATALOG).filter(([, preset]) => Array.isArray(preset) && Array.isArray(preset[1]))
+  );
+
   const SCIENCE_PRESET_CONTENT = {
+    ...BUILT_IN_SCIENCE_PRESETS,
     anchorPhenomenon: ['Phenomenon Launch', [
       ['heading', 12, 1, 'Anchor Phenomenon Placeholder'],
       ['subheading', 12, 1, 'Introduce an observable event or puzzling situation without naming the explanation.'],
@@ -4265,20 +4894,27 @@
       title,
       bg: '#ffffff',
       hasBackground: true,
-      elements: elements.map(([type, colSpan, rowSpan, text], index) => ({
-        id: `science_e${index + 1}`,
-        type,
-        colSpan,
-        rowSpan,
-        text,
-        fontSize: type === 'heading' ? 28 : (type === 'subheading' ? 16 : 14),
-        fill: type === 'badge' ? '#1e40af' : '#ffffff',
-        textColor: type === 'badge' ? '#1e40af' : '#111827',
-        ...(type === 'badge' ? { badgeText: text.split('\n')[0], badgeBody: text.split('\n').slice(1).join('\n') } : {}),
-        ...(type === 'imageCard' || type === 'graph' ? { showCaption: true, captionAlign: 'left', fontSize: 12, fill: '#e2e8f0', textColor: '#475569' } : {}),
-        ...(type === 'dataTable' ? { tableTitle: text.split('\n')[0], tableBody: text.split('\n').slice(1).join('\n'), fontSize: 12 } : {}),
-        ...(type === 'accordion' ? { accordionTitle: text.split('\n')[0], accordionBody: text.split('\n').slice(1).join('\n'), expanded: true, fill: '#1c3a6e', headerTextColor: '#ffffff' } : {})
-      }))
+      elements: elements.map((definition, index) => {
+        const element = Array.isArray(definition)
+          ? { type: definition[0], colSpan: definition[1], rowSpan: definition[2], text: definition[3], ...(definition[4] || {}) }
+          : definition;
+        const { type, colSpan, rowSpan, text, ...elementSettings } = element;
+        return {
+          id: `science_e${index + 1}`,
+          type,
+          colSpan,
+          rowSpan,
+          text,
+          fontSize: type === 'heading' ? 28 : (type === 'subheading' ? 16 : 14),
+          fill: type === 'badge' ? '#1e40af' : '#ffffff',
+          textColor: type === 'badge' ? '#1e40af' : '#111827',
+          ...(type === 'badge' ? { badgeText: text.split('\n')[0], badgeBody: text.split('\n').slice(1).join('\n') } : {}),
+          ...(type === 'imageCard' || type === 'graph' ? { showCaption: true, captionAlign: 'left', fontSize: 12, fill: '#e2e8f0', textColor: '#475569' } : {}),
+          ...(type === 'dataTable' ? { tableTitle: text.split('\n')[0], tableBody: text.split('\n').slice(1).join('\n'), fontSize: 12 } : {}),
+          ...(type === 'accordion' ? { accordionTitle: text.split('\n')[0], accordionBody: text.split('\n').slice(1).join('\n'), expanded: true, fill: '#1c3a6e', headerTextColor: '#ffffff' } : {}),
+          ...elementSettings
+        };
+      })
     }];
   }
   const layoutHistory = {
@@ -4430,6 +5066,10 @@
 
   let pages = [];
   let activePageIndex = 0;
+  let documents = [];
+  let activeDocumentId = null;
+  let pageNavigatorOpen = window.innerWidth > 768;
+  let pageNavigatorViewportMobile = window.innerWidth <= 768;
 
   function ensurePagesStructure() {
     if (!Array.isArray(pages) || pages.length === 0) {
@@ -4481,6 +5121,7 @@
     const newPage = {
       id: 'page_' + Date.now(),
       title: title || `Page ${newPageIndex + 1}`,
+      pageType: getActivePage().pageType,
       preset: preset,
       widthPx: pInfo.widthPx || 1280,
       heightPx: pInfo.heightPx === 'auto' ? 'auto' : (pInfo.heightPx || 720),
@@ -4732,6 +5373,9 @@
   function renderPageTabBar() {
     ensurePagesStructure();
     updateMobilePageNavLabel();
+    renderDocumentSwitcher();
+    renderPageNavigator();
+    syncPageNavigatorState();
     const container = document.getElementById('pagePillsContainer');
     if (!container) return;
 
@@ -4746,20 +5390,307 @@
     });
   }
 
+  function renderDocumentSwitcher() {
+    const select = document.getElementById('activeDocumentSelect');
+    if (!select) return;
+    select.innerHTML = '';
+    documents.forEach(item => {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.title || 'Untitled document';
+      select.appendChild(option);
+    });
+    select.value = activeDocumentId || '';
+    select.disabled = documents.length === 0;
+  }
+
+  function renderDocumentManager() {
+    const container = document.getElementById('documentManagerList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    documents.forEach(item => {
+      const isActive = item.id === activeDocumentId;
+      const row = document.createElement('div');
+      row.className = `document-manager-row${isActive ? ' active' : ''}`;
+      const details = document.createElement('div');
+      details.className = 'document-manager-details';
+      const titleInput = document.createElement('input');
+      titleInput.type = 'text';
+      titleInput.className = 'document-manager-title-input';
+      titleInput.value = item.title || 'Untitled document';
+      titleInput.maxLength = 100;
+      titleInput.setAttribute('aria-label', `Name for ${item.title || 'untitled document'}`);
+      const pageTypes = [...new Set(item.pages.map(page => page.pageType).filter(Boolean))];
+      const detailsText = document.createElement('small');
+      detailsText.textContent = `${item.pages.length} ${item.pages.length === 1 ? 'page' : 'pages'}${pageTypes.length ? ` · ${pageTypes.join(' / ')}` : ''}${isActive ? ' · Active' : ''}`;
+      details.append(titleInput, detailsText);
+
+      const actions = document.createElement('div');
+      actions.className = 'document-manager-actions';
+      const openButton = document.createElement('button');
+      openButton.type = 'button';
+      openButton.title = isActive ? 'Currently open' : `Open ${item.title}`;
+      openButton.setAttribute('aria-label', openButton.title);
+      openButton.disabled = isActive;
+      const openIcon = document.createElement('iconify-icon');
+      openIcon.setAttribute('icon', isActive ? 'lucide:check' : 'lucide:folder-open');
+      openIcon.setAttribute('aria-hidden', 'true');
+      openButton.appendChild(openIcon);
+      openButton.onclick = () => {
+        setActiveDocument(item.id);
+        closeDocumentManager();
+      };
+
+      const renameButton = document.createElement('button');
+      renameButton.type = 'button';
+      renameButton.title = `Rename ${item.title}`;
+      renameButton.setAttribute('aria-label', renameButton.title);
+      renameButton.disabled = titleInput.value.trim() === item.title;
+      const renameIcon = document.createElement('iconify-icon');
+      renameIcon.setAttribute('icon', 'lucide:check');
+      renameIcon.setAttribute('aria-hidden', 'true');
+      renameButton.appendChild(renameIcon);
+      titleInput.addEventListener('input', () => {
+        renameButton.disabled = !titleInput.value.trim() || titleInput.value.trim() === item.title;
+      });
+      titleInput.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !renameButton.disabled) renameWorkspaceDocument(item.id, titleInput.value);
+      });
+      renameButton.onclick = () => renameWorkspaceDocument(item.id, titleInput.value);
+
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'danger';
+      deleteButton.title = documents.length === 1 ? 'Keep at least one document' : `Delete ${item.title}`;
+      deleteButton.setAttribute('aria-label', deleteButton.title);
+      deleteButton.disabled = documents.length <= 1;
+      const deleteIcon = document.createElement('iconify-icon');
+      deleteIcon.setAttribute('icon', 'lucide:trash-2');
+      deleteIcon.setAttribute('aria-hidden', 'true');
+      deleteButton.appendChild(deleteIcon);
+      deleteButton.onclick = () => deleteWorkspaceDocument(item.id);
+
+      actions.append(openButton, renameButton, deleteButton);
+      row.append(details, actions);
+      container.appendChild(row);
+    });
+  }
+
+  function openDocumentManager() {
+    renderDocumentManager();
+    const dialog = document.getElementById('documentManagerDialog');
+    if (dialog?.showModal) dialog.showModal();
+  }
+
+  function closeDocumentManager() {
+    document.getElementById('documentManagerDialog')?.close();
+  }
+
+  function renameWorkspaceDocument(documentId, title) {
+    const documentToRename = documents.find(item => item.id === documentId);
+    const nextTitle = String(title || '').trim();
+    if (!documentToRename || !nextTitle) {
+      showToast('Enter a document name first.');
+      return;
+    }
+    documentToRename.title = nextTitle;
+    saveWorkingLayout();
+    renderPageTabBar();
+    renderDocumentManager();
+    showToast('Document renamed.');
+  }
+
+  function deleteWorkspaceDocument(documentId) {
+    const documentIndex = documents.findIndex(item => item.id === documentId);
+    if (documentIndex < 0) return;
+    if (documents.length <= 1) {
+      showToast('Keep at least one document.');
+      return;
+    }
+    const documentToDelete = documents[documentIndex];
+    if (!window.confirm(`Delete “${documentToDelete.title}” and its ${documentToDelete.pages.length} pages? This cannot be undone.`)) return;
+
+    saveWorkingLayout();
+    const wasActive = documentToDelete.id === activeDocumentId;
+    documents.splice(documentIndex, 1);
+    if (wasActive) {
+      const nextDocument = documents[Math.min(documentIndex, documents.length - 1)];
+      activeDocumentId = nextDocument.id;
+      pages = cloneJson(nextDocument.pages);
+      activePageIndex = Math.max(0, Math.min(pages.length - 1, Number(nextDocument.activePageIndex) || 0));
+      sections = cloneJson(pages[activePageIndex].sections || []);
+      selectedSectionId = sections[0]?.id || null;
+      selectedElementId = null;
+      selectedElementIds = [];
+      renderLayout();
+      updateInspector();
+    } else {
+      saveWorkingLayout();
+      renderPageTabBar();
+    }
+    renderDocumentManager();
+    showToast(`Deleted ${documentToDelete.title}.`);
+  }
+
+  document.getElementById('manageDocumentsBtn')?.addEventListener('click', openDocumentManager);
+  document.getElementById('documentManagerDialog')?.addEventListener('click', event => {
+    if (event.target === event.currentTarget) closeDocumentManager();
+  });
+
+  function renderPageNavigator() {
+    const container = document.getElementById('pageNavigatorList');
+    if (!container) return;
+    const count = document.getElementById('pageNavigatorCount');
+    if (count) count.textContent = `${pages.length} ${pages.length === 1 ? 'page' : 'pages'}`;
+    const query = (document.getElementById('pageNavigatorSearch')?.value || '').trim().toLocaleLowerCase();
+    const groups = [
+      { key: 'IMG', title: 'IMG · Live lesson', pages: [] },
+      { key: 'TPG', title: 'TPG · Planning guide', pages: [] },
+      { key: 'OTHER', title: 'Other pages', pages: [] }
+    ];
+
+    pages.forEach((item, index) => {
+      const pageType = item.pageType === 'IMG' || item.pageType === 'TPG' ? item.pageType : 'OTHER';
+      const searchableText = `${item.title || ''} ${item.pageNumber || index + 1} ${item.stableId || ''}`.toLocaleLowerCase();
+      if (!query || searchableText.includes(query)) groups.find(group => group.key === pageType)?.pages.push({ item, index });
+    });
+
+    container.innerHTML = '';
+    let visibleCount = 0;
+    groups.forEach(group => {
+      if (group.pages.length === 0) return;
+      visibleCount += group.pages.length;
+      const section = document.createElement('section');
+      section.className = 'page-nav-group';
+      const heading = document.createElement('button');
+      heading.type = 'button';
+      heading.className = 'page-nav-group-toggle';
+      heading.setAttribute('aria-expanded', 'true');
+      const marker = document.createElement('iconify-icon');
+      marker.setAttribute('icon', 'lucide:chevron-down');
+      marker.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.textContent = group.title;
+      const groupCount = document.createElement('span');
+      groupCount.className = 'group-count';
+      groupCount.textContent = String(group.pages.length);
+      heading.append(marker, label, groupCount);
+      const groupPages = document.createElement('div');
+      groupPages.className = 'page-nav-group-pages';
+      heading.onclick = () => {
+        const collapsed = section.classList.toggle('is-collapsed');
+        heading.setAttribute('aria-expanded', String(!collapsed));
+        marker.setAttribute('icon', collapsed ? 'lucide:chevron-right' : 'lucide:chevron-down');
+      };
+
+      group.pages.forEach(({ item, index }) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `page-nav-item${index === activePageIndex ? ' active' : ''}`;
+        button.setAttribute('aria-current', index === activePageIndex ? 'page' : 'false');
+        button.title = item.title || `Page ${index + 1}`;
+        const number = document.createElement('span');
+        number.className = 'page-nav-number';
+        number.textContent = String(item.pageNumber || index + 1).padStart(2, '0');
+        const title = document.createElement('span');
+        title.textContent = item.title || `Page ${index + 1}`;
+        button.append(number, title);
+        button.onclick = () => {
+          setActivePage(index);
+          if (window.innerWidth <= 768) setPageNavigatorOpen(false);
+        };
+        groupPages.appendChild(button);
+      });
+
+      section.append(heading, groupPages);
+      container.appendChild(section);
+    });
+
+    if (!visibleCount) {
+      const empty = document.createElement('div');
+      empty.className = 'page-nav-empty';
+      empty.textContent = query ? 'No pages match that search.' : 'This document has no pages yet.';
+      container.appendChild(empty);
+    }
+  }
+
+  function syncPageNavigatorState() {
+    const panel = document.getElementById('pageNavigator');
+    const backdrop = document.getElementById('pageNavigatorBackdrop');
+    const trigger = document.getElementById('togglePageNavigatorBtn');
+    panel?.classList.toggle('is-open', pageNavigatorOpen);
+    panel?.classList.toggle('is-closed', !pageNavigatorOpen);
+    backdrop?.classList.toggle('active', pageNavigatorOpen && window.innerWidth <= 768);
+    trigger?.setAttribute('aria-expanded', String(pageNavigatorOpen));
+  }
+
+  function setPageNavigatorOpen(isOpen) {
+    pageNavigatorOpen = Boolean(isOpen);
+    syncPageNavigatorState();
+  }
+
+  document.getElementById('activeDocumentSelect')?.addEventListener('change', event => setActiveDocument(event.currentTarget.value));
+  document.getElementById('togglePageNavigatorBtn')?.addEventListener('click', () => setPageNavigatorOpen(!pageNavigatorOpen));
+  document.getElementById('closePageNavigatorBtn')?.addEventListener('click', () => setPageNavigatorOpen(false));
+  document.getElementById('pageNavigatorBackdrop')?.addEventListener('click', () => setPageNavigatorOpen(false));
+  document.getElementById('pageNavigatorSearch')?.addEventListener('input', renderPageNavigator);
+
   function saveWorkingLayout() {
     try {
       syncActivePageSections();
-      localStorage.setItem(WORKING_LAYOUT_STORAGE_KEY, JSON.stringify({
+      let activeDocument = documents.find(item => item.id === activeDocumentId);
+      if (!activeDocument) {
+        activeDocument = { id: createId('doc'), title: 'Current layout', pages: [], activePageIndex: 0 };
+        documents.push(activeDocument);
+        activeDocumentId = activeDocument.id;
+      }
+      activeDocument.pages = cloneJson(pages);
+      activeDocument.activePageIndex = activePageIndex;
+      activeDocument.updatedAt = Date.now();
+      const savedLayout = {
         version: 2,
         activePageIndex: activePageIndex,
         pages: cloneJson(pages),
         updatedAt: Date.now()
+      };
+      localStorage.setItem(WORKING_LAYOUT_STORAGE_KEY, JSON.stringify(savedLayout));
+      localStorage.setItem(DOCUMENT_COLLECTION_STORAGE_KEY, JSON.stringify({
+        version: 1,
+        activeDocumentId: activeDocumentId,
+        documents: documents
       }));
     } catch (error) {}
   }
 
   function loadWorkingLayout() {
     try {
+      const documentCollection = localStorage.getItem(DOCUMENT_COLLECTION_STORAGE_KEY);
+      if (documentCollection !== null) {
+        const savedCollection = JSON.parse(documentCollection);
+        const savedDocuments = Array.isArray(savedCollection?.documents)
+          ? savedCollection.documents.filter(item => item && typeof item.id === 'string' && Array.isArray(item.pages) && item.pages.length > 0)
+          : [];
+        if (savedDocuments.length > 0) {
+          documents = savedDocuments;
+          activeDocumentId = documents.some(item => item.id === savedCollection.activeDocumentId)
+            ? savedCollection.activeDocumentId
+            : documents[0].id;
+          const activeDocument = documents.find(item => item.id === activeDocumentId);
+          pages = cloneJson(activeDocument.pages);
+          activePageIndex = Math.max(0, Math.min(pages.length - 1, Number(activeDocument.activePageIndex) || 0));
+          sections = cloneJson(pages[activePageIndex].sections || []);
+          sections.forEach(section => {
+            if (!Object.prototype.hasOwnProperty.call(section, 'hasBackground')) section.hasBackground = section.bg !== 'transparent';
+          });
+          selectedSectionId = sections[0]?.id || null;
+          selectedElementId = null;
+          selectedElementIds = [];
+          renderLayout();
+          return true;
+        }
+      }
+
       const rawValue = localStorage.getItem(WORKING_LAYOUT_STORAGE_KEY);
       if (rawValue === null) return false;
 
@@ -4788,6 +5719,14 @@
         return false;
       }
 
+      documents = [{
+        id: createId('doc'),
+        title: 'Current layout',
+        pages: cloneJson(pages),
+        activePageIndex: activePageIndex,
+        updatedAt: Date.now()
+      }];
+      activeDocumentId = documents[0].id;
       sections.forEach(section => {
         if (!Object.prototype.hasOwnProperty.call(section, 'hasBackground')) section.hasBackground = section.bg !== 'transparent';
       });
@@ -4851,6 +5790,223 @@
     const dialog = document.getElementById('presetChoiceDialog');
     if (dialog?.showModal) dialog.showModal();
     return false;
+  }
+
+  const PAGE_BLUEPRINT_ELEMENT_TYPES = new Set(['heading', 'subheading', 'bodyText', 'badge', 'icon', 'callout', 'accordion', 'imageCard', 'dataTable', 'graph', 'spacer']);
+  const PAGE_BLUEPRINT_COLOR_FIELDS = ['fill', 'textColor', 'borderColor', 'badgeFill', 'badgeTextColor', 'badgeBorderColor', 'badgeBodyFill', 'badgeBodyTextColor', 'badgeBodyBorderColor', 'headerTextColor'];
+  const PAGE_BLUEPRINT_TEXT_FIELDS = ['name', 'text', 'badgeText', 'badgeBody', 'accordionTitle', 'accordionBody', 'tableTitle', 'tableBody'];
+  const PAGE_BLUEPRINT_BOOLEAN_FIELDS = ['hasBackground', 'hasBorder', 'badgeHasBorder', 'badgeBodyHasBorder', 'expanded', 'showCaption'];
+
+  function validatePageBlueprint(data) {
+    if (!data || data.format !== 'lucid-layout' || data.version !== 1 || !Array.isArray(data.sections) || data.sections.length === 0) {
+      throw new Error('This file is not a supported Layout Maker page blueprint.');
+    }
+
+    const pageIds = new Set();
+    const records = data.sections;
+    records.forEach(record => {
+      if (!record || typeof record !== 'object' || !['IMG', 'TPG'].includes(record.pageType) || typeof record.title !== 'string' || !record.title.trim() || typeof record.stableId !== 'string' || !Array.isArray(record.elements) || record.elements.length === 0) {
+        throw new Error('A page is missing its type, title, stable ID, or content.');
+      }
+      if (pageIds.has(record.stableId)) throw new Error('Page stable IDs must be unique.');
+      pageIds.add(record.stableId);
+      if (record.bg != null && !CSS.supports('color', record.bg)) throw new Error('A page background color is invalid.');
+
+      record.elements.forEach(element => {
+        if (!element || typeof element !== 'object' || !PAGE_BLUEPRINT_ELEMENT_TYPES.has(element.type)) {
+          throw new Error('A page contains an unsupported element type.');
+        }
+        if (!Number.isInteger(element.colSpan) || element.colSpan < 1 || element.colSpan > 12 || !Number.isInteger(element.rowSpan) || element.rowSpan < 1 || element.rowSpan > 40 || typeof element.text !== 'string') {
+          throw new Error('A page element has invalid dimensions or text.');
+        }
+        PAGE_BLUEPRINT_TEXT_FIELDS.forEach(field => {
+          if (element[field] != null && typeof element[field] !== 'string') throw new Error(`The ${field} field must be text.`);
+        });
+        PAGE_BLUEPRINT_COLOR_FIELDS.forEach(field => {
+          if (element[field] != null && !CSS.supports('color', element[field])) throw new Error(`The ${field} field must be a valid color.`);
+        });
+        PAGE_BLUEPRINT_BOOLEAN_FIELDS.forEach(field => {
+          if (element[field] != null && typeof element[field] !== 'boolean') throw new Error(`The ${field} field must be true or false.`);
+        });
+        if (element.badgeLayout != null && !['auto', 'horizontal', 'vertical'].includes(element.badgeLayout)) {
+          throw new Error('The badge layout must be auto, horizontal, or vertical.');
+        }
+        if (element.badgeAlign != null && !['start', 'center', 'end'].includes(element.badgeAlign)) {
+          throw new Error('The badge alignment must be start, center, or end.');
+        }
+        if (element.verticalAlign != null && !['auto', 'top', 'center', 'bottom'].includes(element.verticalAlign)) {
+          throw new Error('The vertical alignment must be auto, top, center, or bottom.');
+        }
+        if (element.fontSize != null && !isAutoFontSize(element.fontSize) && (!Number.isFinite(element.fontSize) || element.fontSize < 1 || element.fontSize > 72)) {
+          throw new Error('A page element font size is invalid.');
+        }
+      });
+    });
+
+    if (data.pageSpecification) {
+      const imgPages = records.filter(record => record.pageType === 'IMG').length;
+      const tpgPages = records.filter(record => record.pageType === 'TPG').length;
+      if (imgPages !== data.pageSpecification.imgPages || tpgPages !== data.pageSpecification.tpgPages) {
+        throw new Error('The page counts do not match the blueprint specification.');
+      }
+    }
+
+    return cloneJson(records);
+  }
+
+  function buildImportedPages(records) {
+    return records.map((record, index) => {
+      const preset = 'letter-portrait';
+      const dimensions = PAGE_PRESETS[preset];
+      return {
+        id: createId('page'),
+        title: record.title,
+        stableId: record.stableId,
+        pageType: record.pageType,
+        pageNumber: record.pageNumber || index + 1,
+        preset,
+        widthPx: dimensions.widthPx,
+        heightPx: dimensions.heightPx,
+        bg: record.bg || '#ffffff',
+        sections: [{
+          id: createId('sec'),
+          title: record.pageType === 'IMG' ? 'Facilitation notes' : 'Planning notes',
+          bg: record.bg || '#ffffff',
+          hasBackground: record.hasBackground !== false,
+          elements: record.elements.map(element => ({ ...element, id: createId('el') }))
+        }]
+      };
+    });
+  }
+
+  function setActiveDocument(documentId) {
+    const nextDocument = documents.find(item => item.id === documentId);
+    if (!nextDocument || nextDocument.id === activeDocumentId) return;
+    saveWorkingLayout();
+    activeDocumentId = nextDocument.id;
+    pages = cloneJson(nextDocument.pages);
+    activePageIndex = Math.max(0, Math.min(pages.length - 1, Number(nextDocument.activePageIndex) || 0));
+    sections = cloneJson(pages[activePageIndex].sections || []);
+    selectedSectionId = sections[0]?.id || null;
+    selectedElementId = null;
+    selectedElementIds = [];
+    renderLayout();
+    updateInspector();
+    showToast(`Opened ${nextDocument.title}`);
+  }
+
+  function createWorkspaceDocument(title, importedPages) {
+    saveWorkingLayout();
+    const workspace = {
+      id: createId('doc'),
+      title: title || 'Imported document',
+      pages: cloneJson(importedPages),
+      activePageIndex: 0,
+      updatedAt: Date.now()
+    };
+    documents.push(workspace);
+    activeDocumentId = workspace.id;
+    pages = cloneJson(workspace.pages);
+    activePageIndex = 0;
+    sections = cloneJson(pages[0].sections || []);
+    selectedSectionId = sections[0]?.id || null;
+    selectedElementId = null;
+    selectedElementIds = [];
+    renderLayout();
+    updateInspector();
+    showToast(`Created ${workspace.title}`);
+    return workspace;
+  }
+
+  function getBlueprintLessonTitle(title) {
+    const cleanedTitle = String(title || 'Imported lesson').replace(/\s*\|\s*(?:Teacher Guide|IMG|TPG)\s*$/i, '');
+    return cleanedTitle.split('|').map(part => part.trim()).filter(Boolean).pop() || 'Imported lesson';
+  }
+
+  function commitImportedPages(records, mode, blueprintTitle = '') {
+    const importedPages = buildImportedPages(records);
+
+    if (mode === 'split') {
+      saveWorkingLayout();
+      const lessonTitle = getBlueprintLessonTitle(blueprintTitle);
+      const createdDocuments = ['IMG', 'TPG'].map(pageType => {
+        const documentPages = importedPages.filter(page => page.pageType === pageType).map((page, index) => {
+          const pageNumber = index + 1;
+          const pageNumberLabel = String(pageNumber).padStart(2, '0');
+          return {
+            ...page,
+            pageNumber,
+            title: String(page.title || '').replace(/^\s*\d+\s*\|/, `${pageNumberLabel} |`)
+          };
+        });
+        return {
+          id: createId('doc'),
+          title: `${pageType} · ${lessonTitle}`,
+          pages: documentPages,
+          activePageIndex: 0,
+          updatedAt: Date.now()
+        };
+      }).filter(item => item.pages.length > 0);
+      documents.push(...createdDocuments);
+      activeDocumentId = createdDocuments[0].id;
+      pages = cloneJson(createdDocuments[0].pages);
+      activePageIndex = 0;
+      sections = cloneJson(pages[0].sections || []);
+      selectedSectionId = sections[0]?.id || null;
+      selectedElementId = null;
+      selectedElementIds = [];
+      renderLayout();
+      updateInspector();
+      showToast(`Created ${createdDocuments.map(item => item.title.split(' · ')[0]).join(' and ')} documents`);
+      return;
+    }
+
+    if (mode === 'new' || mode === 'replace') {
+      const pageTypes = [...new Set(importedPages.map(page => page.pageType).filter(Boolean))];
+      const title = pageTypes.length === 1
+        ? `${pageTypes[0]} · ${getBlueprintLessonTitle(blueprintTitle)}`
+        : (blueprintTitle || 'Imported document');
+      createWorkspaceDocument(title, importedPages);
+      return;
+    }
+
+    syncActivePageSections();
+    const appendIndex = pages.length;
+
+    pages.push(...importedPages);
+    activePageIndex = appendIndex;
+
+    sections = pages[activePageIndex].sections;
+    selectedSectionId = sections[0]?.id || null;
+    selectedElementId = null;
+    selectedElementIds = [];
+    layoutHistory.undo = [];
+    layoutHistory.redo = [];
+    layoutHistory.lastSnapshot = null;
+    renderLayout();
+    updateInspector();
+    updateHistoryControls();
+    showToast(`Appended ${importedPages.length} pages.`);
+  }
+
+  function openPageBlueprintChoice(records, title = '') {
+    pendingPresetSections = null;
+    pendingImportedPages = records;
+    pendingBlueprintTitle = title;
+    const imgCount = records.filter(record => record.pageType === 'IMG').length;
+    const tpgCount = records.filter(record => record.pageType === 'TPG').length;
+    const canSplit = imgCount > 0 && tpgCount > 0;
+    document.getElementById('presetChoiceTitle').textContent = 'Import lesson documents';
+    document.getElementById('presetChoiceDescription').textContent = canSplit
+      ? `This blueprint contains ${imgCount} IMG live-lesson pages and ${tpgCount} TPG planning pages. Keep them together, create separate documents, or append all pages to the current document.`
+      : `Import ${records.length} pages into a new document or append them to the current document.`;
+    document.getElementById('splitBlueprintBtn').hidden = !canSplit;
+    document.getElementById('presetChoiceActions').classList.toggle('has-split', canSplit);
+    document.getElementById('replacePresetBtn').textContent = 'Create new document';
+    document.getElementById('appendPresetBtn').textContent = 'Append imported pages';
+    const dialog = document.getElementById('presetChoiceDialog');
+    if (dialog?.showModal) dialog.showModal();
+    else dialog?.setAttribute('open', '');
   }
 
   function selectPreset(name) {
@@ -5353,6 +6509,18 @@
       return;
     }
 
+    if (swappingSelectedElement) {
+      swappingSelectedElement = false;
+      if (!getSelectedElementInfo()) {
+        updateMobileDockBar();
+        showToast('Select a widget before swapping.');
+        return;
+      }
+      replaceSelectedElementWithType(type);
+      if (window.innerWidth <= 768) closeAllMobilePanels();
+      return;
+    }
+
     pendingLibraryType = type;
     const dialog = document.getElementById('libraryActionDialog');
     const desc = document.getElementById('libraryActionDesc');
@@ -5413,7 +6581,7 @@
     const info = getSelectedElementInfo();
     if (!info) return addElement(type);
 
-    const targetSec = info.section;
+    const targetSec = info.sec;
     const idx = targetSec.elements.findIndex(e => e.id === info.el.id);
     if (idx < 0) return addElement(type);
 
@@ -5636,6 +6804,32 @@
     return el;
   }
 
+  function getBadgeLayout(el, page = getActivePage()) {
+    if (el?.badgeLayout === 'horizontal' || el?.badgeLayout === 'vertical') return el.badgeLayout;
+    return page?.preset === 'letter-portrait' ? 'vertical' : 'horizontal';
+  }
+
+  function getBadgeAlign(el, layout = getBadgeLayout(el)) {
+    if (['start', 'center', 'end'].includes(el?.badgeAlign)) return el.badgeAlign;
+    return layout === 'vertical' ? 'start' : 'center';
+  }
+
+  function getBadgeAlignSelf(el, layout = getBadgeLayout(el)) {
+    const alignment = getBadgeAlign(el, layout);
+    return alignment === 'start' ? 'flex-start' : (alignment === 'end' ? 'flex-end' : 'center');
+  }
+
+  function getVerticalAlign(el) {
+    if (['top', 'center', 'bottom'].includes(el?.verticalAlign)) return el.verticalAlign;
+    if (el?.type === 'heading' || el?.type === 'subheading' || el?.type === 'badge') return 'center';
+    return 'top';
+  }
+
+  function getVerticalJustifyContent(el) {
+    const alignment = getVerticalAlign(el);
+    return alignment === 'top' ? 'flex-start' : (alignment === 'bottom' ? 'flex-end' : 'center');
+  }
+
   function syncCompositeText(el) {
     ensureCompositeTextFields(el);
 
@@ -5672,6 +6866,173 @@
     if (/^#[0-9a-f]{6}$/.test(color)) return `${color}ff`;
     if (/^#[0-9a-f]{8}$/.test(color)) return color;
     return `${fallback.toLowerCase()}ff`;
+  }
+
+  function parseDataTableRows(value) {
+    return String(value ?? '').split(/\r?\n/).filter(line => line.trim()).map(line => {
+      const delimiter = line.includes('\t') ? '\t' : '|';
+      return line.split(delimiter).map(cell => cell.trim());
+    });
+  }
+
+  function buildDataTableMarkup(el, { clipboard = false } = {}) {
+    const rows = parseDataTableRows(el.tableBody);
+    const normalizedRows = rows.length ? rows : [['']];
+    const columnCount = Math.max(1, ...normalizedRows.map(row => row.length));
+    const border = '#cbd5e1';
+    const headerFill = '#eaf0f6';
+    const textColor = escapeHtml(el.textColor || '#334155');
+    const cellStyle = isHeader => clipboard
+      ? `border:1px solid ${border};padding:6px 8px;text-align:left;vertical-align:top;color:${textColor};${isHeader ? `background-color:${headerFill};font-weight:bold;` : ''}`
+      : '';
+    const headerCells = Array.from({ length: columnCount }, (_, columnIndex) => {
+      const value = escapeHtml(normalizedRows[0]?.[columnIndex] || '');
+      const style = cellStyle(true);
+      return `<th scope="col"${style ? ` style="${style}"` : ''}>${value}</th>`;
+    }).join('');
+    const bodyRows = normalizedRows.slice(1).map(row => `<tr>${Array.from({ length: columnCount }, (_, columnIndex) => {
+      const value = escapeHtml(row[columnIndex] || '');
+      const style = cellStyle(false);
+      return `<td${style ? ` style="${style}"` : ''}>${value}</td>`;
+    }).join('')}</tr>`).join('');
+    const tableStyle = clipboard ? ' style="width:100%;border-collapse:collapse;table-layout:fixed;"' : '';
+    const label = escapeHtml(el.tableTitle || el.name || 'Data table');
+    const table = `<table${tableStyle} aria-label="${label}"><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>`;
+    return clipboard ? table : `<div class="data-table-widget">${table}</div>`;
+  }
+
+  function createLucidDataTableObject(el, { x, y, w, h, zOrder, fontSize }) {
+    const parsedRows = parseDataTableRows(el.tableBody);
+    const rows = parsedRows.length ? parsedRows : [['']];
+    const columnCount = Math.max(1, ...rows.map(row => row.length));
+    const normalizedRows = rows.map(row => Array.from({ length: columnCount }, (_, columnIndex) => row[columnIndex] || ''));
+    const cellProperties = {};
+    const textColor = toLucidColor(el.textColor || '#334155');
+
+    normalizedRows.forEach((row, rowIndex) => {
+      row.forEach((text, columnIndex) => {
+        const cellText = String(text);
+        const end = Math.max(1, cellText.length);
+        const cellKey = `${rowIndex},${columnIndex}`;
+        const markup = [
+          { s: 0, n: 'a', v: 'left' },
+          ...(rowIndex === 0 ? [{ s: 0, n: 'b', v: true, e: end }] : []),
+          { s: 0, n: 'c', v: textColor, e: end },
+          { s: 0, n: 's', v: fontSize, e: end }
+        ];
+        cellProperties[`CellFill_${cellKey}`] = rowIndex === 0 ? '#eaf0f6' : 'rgba(0, 0, 0, 0)';
+        cellProperties[`CellSize_${cellKey}`] = { w: 1, h: 1 };
+        cellProperties[`Cell_${cellKey}`] = { t: cellText, m: markup };
+      });
+    });
+
+    return {
+      id: el.id,
+      IsBlock: true,
+      HiddenLocally: false,
+      Action: {
+        Action: 'CreateBlock',
+        Class: 'DefaultTableBlock',
+        Properties: {
+          BG: 0,
+          DisabledFeatures: [],
+          Hidden: 0,
+          Opacity: 100,
+          Restrictions: {},
+          RuleList: [],
+          ZOrder: zOrder,
+          BoundingBox: { x, y, w, h },
+          DataSyncStateIconPosition: null,
+          FillColor: 'unset',
+          FlipX: false,
+          FlipY: false,
+          GutterPadding: 5,
+          IgnoreTheme: {},
+          ImageFillProps: false,
+          InsetMargin: 5,
+          LineColor: 'unset',
+          LineWidth: 'unset',
+          NoteHint: '',
+          Rotation: 0,
+          Rounding: 12,
+          StrokeStyle: 'unset',
+          StylePresetId: 'ss_presetShapeStyle1',
+          TextAlign: 'center',
+          TRotation: 0,
+          TextVAlign: 'middle',
+          TraitsKeySourceCache: [],
+          TraitsLucidFieldToSourceCache: [],
+          DefaultTextStyle: {},
+          ActiveWidget: false,
+          WidgetOrder: 'V',
+          WidgetAutoFill: true,
+          AutoRowHeight: false,
+          AutoColWidth: false,
+          HideH: false,
+          HideV: false,
+          RowHeights: Array(normalizedRows.length).fill(h / normalizedRows.length),
+          ColWidths: Array(columnCount).fill(w / columnCount),
+          BandedRows: false,
+          BandedCols: false,
+          BandedColor1: '#99ccff',
+          BandedColor2: '#ffffff',
+          SortingKey: '',
+          SortingReverse: false,
+          ...cellProperties
+        }
+      }
+    };
+  }
+
+  function isAutoFontSize(value) {
+    return typeof value === 'string' && value.trim().toLowerCase() === 'auto';
+  }
+
+  function getFontSizeCss(value, fallback = 14) {
+    if (isAutoFontSize(value)) return 'inherit';
+    const numericValue = Number(value);
+    return `${Number.isFinite(numericValue) && numericValue > 0 ? numericValue : fallback}px`;
+  }
+
+  function setFontSizeControlValue(value) {
+    const input = document.getElementById('inpFontSize');
+    input.querySelector('option[data-current-font-size]')?.remove();
+
+    const valueString = isAutoFontSize(value) ? 'auto' : String(value ?? 14);
+    if (!Array.from(input.options).some(option => option.value === valueString)) {
+      const option = document.createElement('option');
+      option.value = valueString;
+      option.textContent = `${valueString} px (current)`;
+      option.dataset.currentFontSize = 'true';
+      input.appendChild(option);
+    }
+    input.value = valueString;
+  }
+
+  function toLucidPlainText(value) {
+    const body = new DOMParser().parseFromString(String(value ?? ''), 'text/html').body;
+    const blockTags = new Set(['BLOCKQUOTE', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'OL', 'P', 'PRE', 'UL']);
+    const textParts = [];
+
+    const appendNodeText = node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        textParts.push(node.nodeValue || '');
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      if (node.tagName === 'BR') {
+        textParts.push('\n');
+        return;
+      }
+
+      const isBlock = blockTags.has(node.tagName);
+      if (isBlock && textParts.length && !textParts[textParts.length - 1].endsWith('\n')) textParts.push('\n');
+      node.childNodes.forEach(appendNodeText);
+      if (isBlock && textParts.length && !textParts[textParts.length - 1].endsWith('\n')) textParts.push('\n');
+    };
+
+    body.childNodes.forEach(appendNodeText);
+    return textParts.join('').replace(/\r\n?/g, '\n').replace(/[ \t]*\n[ \t]*/g, '\n').trim();
   }
 
   function truncateSvgText(value, maxLength = 58) {
@@ -5944,6 +7305,7 @@
     ensurePagesStructure();
     renderPageTabBar();
     const activePage = getActivePage();
+    docPage?.classList.toggle('letter-portrait-page', activePage.preset === 'letter-portrait');
 
     const wPx = activePage.widthPx || 1280;
     if (docPage) {
@@ -6070,6 +7432,7 @@
         elDiv.style.gridColumn = `span ${el.colSpan || 12}`;
         const effectiveRowSpan = getEffectiveRowSpan(el);
         elDiv.style.gridRow = `span ${effectiveRowSpan}`;
+        elDiv.style.justifyContent = getVerticalJustifyContent(el);
         elDiv.draggable = true;
 
         if (el.type !== 'accordion' && el.type !== 'badge' && el.type !== 'spacer') {
@@ -6098,11 +7461,13 @@
         if (el.type === 'badge') {
           const pillText = el.badgeText || '[Standard]';
           const bodyTxt = el.badgeBody || '';
+          const badgeLayout = getBadgeLayout(el, activePage);
+          const pillAlignment = getBadgeAlignSelf(el, badgeLayout);
           const pillBorder = el.badgeHasBorder === true ? `border:1px solid ${el.badgeBorderColor || '#cbd5e1'};` : 'border:none;';
           const bodyBorder = el.badgeBodyHasBorder === true ? `border:1px solid ${el.badgeBodyBorderColor || '#cbd5e1'};` : 'border:none;';
-          content += `<div class="badge-content" style="display:flex; flex-direction:row; flex-wrap:nowrap; align-items:center; width:100%; gap:12px;">
-                        <div class="badge-pill" style="flex:0 0 auto; max-width:fit-content; white-space:nowrap; display:inline-block; margin-right:12px; background:${el.badgeFill || '#1c324a'}; color:${el.badgeTextColor || '#ffffff'}; ${pillBorder} padding:4px 14px; border-radius:20px; font-weight:bold; font-size:${el.fontSize}px;">${pillText}</div>
-                        <div class="badge-body" style="flex:1 1 auto; min-width:0; display:block; background:${el.badgeBodyFill && el.badgeBodyFill !== 'transparent' ? el.badgeBodyFill : 'transparent'}; font-size:${el.fontSize}px; color:${el.badgeBodyTextColor || '#1c324a'}; ${bodyBorder}">${bodyTxt}</div>
+          content += `<div class="badge-content" data-layout="${badgeLayout}" data-align="${getBadgeAlign(el, badgeLayout)}" style="display:flex; flex-wrap:nowrap; align-items:stretch; width:100%; gap:12px;">
+                        <div class="badge-pill" style="flex:0 0 auto; max-width:100%; white-space:normal; display:inline-block; align-self:${pillAlignment}; background:${el.badgeFill || '#1c324a'}; color:${el.badgeTextColor || '#ffffff'}; ${pillBorder} padding:4px 14px; border-radius:20px; font-weight:bold; font-size:${getFontSizeCss(el.fontSize)};">${pillText}</div>
+                        <div class="badge-body" style="flex:1 1 auto; min-width:0; width:${badgeLayout === 'vertical' ? '100%' : 'auto'}; display:block; overflow-wrap:anywhere; white-space:pre-wrap; background:${el.badgeBodyFill && el.badgeBodyFill !== 'transparent' ? el.badgeBodyFill : 'transparent'}; font-size:${getFontSizeCss(el.fontSize)}; color:${el.badgeBodyTextColor || '#1c324a'}; ${bodyBorder}">${bodyTxt}</div>
                       </div>`;
         } else if (el.type === 'icon') {
           const align = el.align || 'center';
@@ -6117,9 +7482,9 @@
           const body = el.accordionBody || '';
           
           content += `<div style="display:flex; flex-direction:column; height:100%; border: 1px solid #cbd5e1; border-radius:4px; overflow:hidden;">`;
-          content += `<div style="background:${el.fill || '#e2e8f0'}; padding:8px 12px; font-size:${el.fontSize}px; font-weight:bold; color:${el.headerTextColor || '#ffffff'};">${el.expanded ? '▼' : '►'} ${title}</div>`;
+          content += `<div style="background:${el.fill || '#e2e8f0'}; padding:8px 12px; font-size:${getFontSizeCss(el.fontSize)}; font-weight:bold; color:${el.headerTextColor || '#ffffff'};">${el.expanded ? '▼' : '►'} ${title}</div>`;
           if (el.expanded) {
-            content += `<div style="flex:1; padding:8px 12px; background:#f8fafc; font-size:${el.fontSize}px; color:${el.textColor}; line-height:1.4;">${body}</div>`;
+            content += `<div style="flex:1; padding:8px 12px; background:#f8fafc; font-size:${getFontSizeCss(el.fontSize)}; color:${el.textColor}; line-height:1.4;">${body}</div>`;
           }
           content += `</div>`;
           elDiv.style.padding = '0';
@@ -6137,9 +7502,10 @@
           } else {
             content += `<div class="svg-placeholder">${buildSvgPlaceholderMarkup(el, el.type === 'graph' ? 'graph' : 'media', false)}</div>`;
           }
-          if (el.showCaption !== false && el.text) content += `<div class="element-caption" style="font-size:${el.fontSize}px; text-align:${el.captionAlign || 'left'}; margin-top:8px; padding:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; color:${el.textColor};">${el.text}</div>`;
+          if (el.showCaption !== false && el.text) content += `<div class="element-caption" style="font-size:${getFontSizeCss(el.fontSize, 12)}; text-align:${el.captionAlign || 'left'}; margin-top:8px; padding:6px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; color:${el.textColor};">${el.text}</div>`;
         } else if (el.type === 'dataTable') {
-          content += `<div class="svg-placeholder">${buildSvgPlaceholderMarkup(el, 'table', false)}</div>`;
+          ensureCompositeTextFields(el);
+          content += buildDataTableMarkup(el);
         } else if (el.type === 'spacer') {
           content += '<div aria-hidden="true"></div>';
         } else {
@@ -6147,7 +7513,7 @@
           if (el.linkUrl && (el.type === 'heading' || el.type === 'subheading')) {
             textDisplay = `<a href="${escapeHtml(el.linkUrl)}" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline;">${textDisplay}</a>`;
           }
-          content += `<div class="element-text" style="font-size:${el.fontSize}px; color:${el.textColor}; white-space:pre-wrap;">${textDisplay}</div>`;
+          content += `<div class="element-text" style="font-size:${getFontSizeCss(el.fontSize)}; color:${el.textColor}; white-space:pre-wrap;">${textDisplay}</div>`;
         }
 
         elDiv.innerHTML += content;
@@ -6202,7 +7568,7 @@
       const field = (focusState.id ? document.getElementById(focusState.id) : null) || focusState.element;
       if (field && getComputedStyle(field).display !== 'none' && document.activeElement !== field) {
         try {
-          field.focus();
+          field.focus({ preventScroll: true });
           if (typeof focusState.start === 'number' && typeof field.setSelectionRange === 'function') {
             const end = typeof focusState.end === 'number' ? focusState.end : focusState.start;
             field.setSelectionRange(focusState.start, end);
@@ -6259,6 +7625,7 @@
       document.getElementById('inpElementName').value = el.name || '';
       const isSpacer = el.type === 'spacer';
       const isIcon = el.type === 'icon';
+      const isBadge = el.type === 'badge';
       const isComposite = ['badge', 'accordion', 'dataTable'].includes(el.type);
       const isSingleLine = (el.type === 'heading' || el.type === 'subheading' || el.type === 'graph');
       
@@ -6305,6 +7672,9 @@
       if (el.type === 'badge') {
         document.getElementById('inpBadgeText').value = el.badgeText;
         document.getElementById('inpBadgeBody').value = el.badgeBody;
+        document.getElementById('inpBadgeLayout').value = ['auto', 'horizontal', 'vertical'].includes(el.badgeLayout) ? el.badgeLayout : 'auto';
+        const badgeLayout = getBadgeLayout(el, getActivePage());
+        document.getElementById('inpBadgeAlign').value = getBadgeAlign(el, badgeLayout);
         document.getElementById('inpBadgeFill').value = el.badgeFill;
         document.getElementById('inpBadgeTextColor').value = el.badgeTextColor;
         document.getElementById('inpBadgeBorderEnabled').checked = el.badgeHasBorder === true;
@@ -6323,25 +7693,33 @@
         document.getElementById('inpAccordionBody').value = el.accordionBody;
       }
 
+      document.getElementById('dataTableTextGroup').style.display = el.type === 'dataTable' ? 'block' : 'none';
+      if (el.type === 'dataTable') {
+        document.getElementById('inpTableTitle').value = el.tableTitle;
+        document.getElementById('inpTableBody').value = el.tableBody;
+      }
+
       document.getElementById('inpColSpan').value = el.colSpan;
       document.getElementById('inpRowSpan').value = el.rowSpan || 1;
       document.getElementById('inpRowSpan').disabled = el.type === 'accordion' && el.expanded !== true;
-      document.getElementById('inpFontSize').value = el.fontSize;
+      document.getElementById('inpVerticalAlign').value = ['auto', 'top', 'center', 'bottom'].includes(el.verticalAlign) ? el.verticalAlign : 'auto';
+      document.getElementById('inpVerticalAlign').disabled = isSpacer;
+      setFontSizeControlValue(el.fontSize);
       document.getElementById('inpFill').value = /^#[0-9a-f]{6}$/i.test(el.fill || '') ? el.fill : '#ffffff';
       document.getElementById('inpElementBgEnabled').checked = el.hasBackground === true;
       document.getElementById('inpElementBorderEnabled').checked = el.hasBorder === true;
       document.getElementById('inpBorderColor').value = /^#[0-9a-f]{6}$/i.test(el.borderColor || '') ? el.borderColor : '#cbd5e1';
+      document.getElementById('elementBorderLabel').textContent = isBadge ? 'Use whole-widget border' : 'Use element border';
       document.getElementById('inpTextColor').value = /^#[0-9a-f]{6}$/i.test(el.textColor || '') ? el.textColor : '#000000';
       document.getElementById('inpFontSize').disabled = isSpacer;
       document.getElementById('inpFill').disabled = isSpacer || el.hasBackground !== true;
       document.getElementById('inpBorderColor').disabled = isSpacer || el.hasBorder !== true;
       document.getElementById('inpTextColor').disabled = isSpacer;
-      const isBadge = el.type === 'badge';
       document.getElementById('inpFill').disabled = isSpacer || isBadge || el.hasBackground !== true;
       document.getElementById('inpTextColor').disabled = isSpacer || isBadge;
       document.getElementById('inpElementBgEnabled').disabled = isBadge;
-      document.getElementById('inpElementBorderEnabled').disabled = isBadge;
-      document.getElementById('inpBorderColor').disabled = isSpacer || isBadge || el.hasBorder !== true;
+      document.getElementById('inpElementBorderEnabled').disabled = isSpacer;
+      document.getElementById('inpBorderColor').disabled = isSpacer || el.hasBorder !== true;
 
       document.getElementById('accordionGroup').style.display = el.type === 'accordion' ? 'block' : 'none';
       if (el.type === 'accordion') document.getElementById('inpExpanded').checked = el.expanded === true;
@@ -6504,6 +7882,8 @@
   }
   document.getElementById('inpBadgeText').oninput = e => handleCompositeInput('badgeText', e);
   document.getElementById('inpBadgeBody').oninput = e => handleCompositeInput('badgeBody', e);
+  document.getElementById('inpBadgeLayout').onchange = e => { const el = getSelectedEl(); if (el) { el.badgeLayout = e.target.value; renderLayout(); }};
+  document.getElementById('inpBadgeAlign').onchange = e => { const el = getSelectedEl(); if (el) { el.badgeAlign = e.target.value; renderLayout(); }};
   document.getElementById('inpBadgeFill').oninput = e => { let el = getSelectedEl(); if(el) { el.badgeFill = e.target.value; renderLayout(); }};
   document.getElementById('inpBadgeTextColor').oninput = e => { let el = getSelectedEl(); if(el) { el.badgeTextColor = e.target.value; renderLayout(); }};
   document.getElementById('inpBadgeBorderEnabled').onchange = e => { let el = getSelectedEl(); if(el) { el.badgeHasBorder = e.target.checked; renderLayout(); }};
@@ -6514,10 +7894,13 @@
   document.getElementById('inpBadgeBodyBorderColor').oninput = e => { let el = getSelectedEl(); if(el) { el.badgeBodyBorderColor = e.target.value; el.badgeBodyHasBorder = true; renderLayout(); }};
   document.getElementById('inpAccordionTitle').oninput = e => handleCompositeInput('accordionTitle', e);
   document.getElementById('inpAccordionBody').oninput = e => handleCompositeInput('accordionBody', e);
+  document.getElementById('inpTableTitle').oninput = e => handleCompositeInput('tableTitle', e);
+  document.getElementById('inpTableBody').oninput = e => handleCompositeInput('tableBody', e);
 
   document.getElementById('inpColSpan').oninput = e => { let el = getSelectedEl(); if(el) { el.colSpan = parseInt(e.target.value)||12; renderLayout(); }};
   document.getElementById('inpRowSpan').oninput = e => { let el = getSelectedEl(); if(el) { el.rowSpan = parseInt(e.target.value)||1; renderLayout(); }};
-  document.getElementById('inpFontSize').oninput = e => { let el = getSelectedEl(); if(el) { el.fontSize = parseInt(e.target.value)||14; renderLayout(); }};
+  document.getElementById('inpVerticalAlign').onchange = e => { let el = getSelectedEl(); if(el) { el.verticalAlign = e.target.value; renderLayout(); }};
+  document.getElementById('inpFontSize').onchange = e => { let el = getSelectedEl(); if(el) { el.fontSize = isAutoFontSize(e.target.value) ? 'auto' : (parseInt(e.target.value, 10) || 14); renderLayout(); }};
   document.getElementById('inpElementBgEnabled').onchange = e => { let el = getSelectedEl(); if(el) { el.hasBackground = e.target.checked; renderLayout(); }};
   document.getElementById('inpElementBorderEnabled').onchange = e => { let el = getSelectedEl(); if(el) { el.hasBorder = e.target.checked; renderLayout(); }};
   document.getElementById('inpBorderColor').oninput = e => { let el = getSelectedEl(); if(el) { el.borderColor = e.target.value; el.hasBorder = true; renderLayout(); }};
@@ -7020,17 +8403,24 @@
           const scaleFactor = (Number(el.imageScale) || 100) / 100;
           const rot = Number(el.imageRotation) || 0;
 
-          pagesMarkup += `      <div class="grid-element" style="grid-column: span ${colSpan}; background:${el.hasBackground ? (el.fill || '#ffffff') : 'transparent'}; color:${el.textColor || '#000000'}; font-size:${el.fontSize || 14}px; ${el.hasBorder ? `border:1px solid ${el.borderColor || '#cbd5e1'};` : ''}">\n`;
+          pagesMarkup += `      <div class="grid-element" style="grid-column: span ${colSpan}; display:flex; flex-direction:column; justify-content:${getVerticalJustifyContent(el)}; background:${el.hasBackground ? (el.fill || '#ffffff') : 'transparent'}; color:${el.textColor || '#000000'}; font-size:${getFontSizeCss(el.fontSize, 14)}; ${el.hasBorder ? `border:1px solid ${el.borderColor || '#cbd5e1'};` : ''}">\n`;
 
           if (el.type === 'heading') {
-            pagesMarkup += `        <h1 style="margin:0; font-size:${el.fontSize || 28}px; color:${el.textColor || '#0f2b5c'};">${escapeHtml(el.text || '')}</h1>\n`;
+            pagesMarkup += `        <h1 style="margin:0; font-size:${getFontSizeCss(el.fontSize, 28)}; color:${el.textColor || '#0f2b5c'};">${escapeHtml(el.text || '')}</h1>\n`;
           } else if (el.type === 'subheading') {
-            pagesMarkup += `        <h2 style="margin:0; font-size:${el.fontSize || 20}px; color:${el.textColor || '#475569'};">${escapeHtml(el.text || '')}</h2>\n`;
+            pagesMarkup += `        <h2 style="margin:0; font-size:${getFontSizeCss(el.fontSize, 20)}; color:${el.textColor || '#475569'};">${escapeHtml(el.text || '')}</h2>\n`;
+          } else if (el.type === 'badge') {
+            const badgeLayout = getBadgeLayout(el, pg);
+            const pillAlignment = getBadgeAlignSelf(el, badgeLayout);
+            pagesMarkup += `        <div class="badge-content" data-layout="${badgeLayout}" style="display:flex; flex-direction:${badgeLayout === 'vertical' ? 'column' : 'row'}; align-items:stretch; gap:12px; width:100%;">
+          <div class="badge-pill" style="align-self:${pillAlignment}; background:${el.badgeFill || '#1c324a'}; color:${el.badgeTextColor || '#ffffff'}; ${el.badgeHasBorder ? `border:1px solid ${el.badgeBorderColor || '#cbd5e1'};` : ''} border-radius:20px; padding:4px 14px; font-weight:bold; max-width:100%; overflow-wrap:anywhere;">${escapeHtml(el.badgeText || '[Standard]')}</div>
+          <div class="badge-body" style="flex:1 1 auto; min-width:0; width:${badgeLayout === 'vertical' ? '100%' : 'auto'}; background:${el.badgeBodyFill && el.badgeBodyFill !== 'transparent' ? el.badgeBodyFill : 'transparent'}; color:${el.badgeBodyTextColor || '#1c324a'}; ${el.badgeBodyHasBorder ? `border:1px solid ${el.badgeBodyBorderColor || '#cbd5e1'};` : ''} overflow-wrap:anywhere; white-space:pre-wrap;">${escapeHtml(el.badgeBody || '')}</div>
+        </div>\n`;
           } else if (el.type === 'imageCard' || el.type === 'graph') {
             if (el.imageUrl) {
               pagesMarkup += `        <div style="width:100%; height:220px; overflow:hidden; border-radius:4px; position:relative;"><img src="${escapeHtml(el.imageUrl)}" style="width:100%; height:100%; object-fit:${fit}; object-position:${pos}; transform:scale(${scaleFactor}) rotate(${rot}deg);" alt="Media"></div>\n`;
             }
-            if (el.text) pagesMarkup += `        <div style="font-size:12px; color:#64748b; margin-top:6px;">${escapeHtml(el.text)}</div>\n`;
+            if (el.text) pagesMarkup += `        <div style="font-size:${getFontSizeCss(el.fontSize, 12)}; color:#64748b; margin-top:6px;">${escapeHtml(el.text)}</div>\n`;
           } else {
             pagesMarkup += `        <div>${el.text || ''}</div>\n`;
           }
@@ -7058,6 +8448,12 @@
     .layout-section { width: 100%; border-radius: 8px; padding: 16px; }
     .section-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 12px; align-items: start; width: 100%; }
     .grid-element { border-radius: 6px; padding: 12px; overflow-wrap: break-word; }
+    .badge-content { min-width: 0; }
+    .badge-content[data-layout="horizontal"] { flex-direction: row; }
+    .badge-content[data-layout="vertical"] { flex-direction: column; }
+    .badge-pill { flex: 0 0 auto; white-space: normal; }
+    .badge-body { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .badge-content[data-layout="vertical"] .badge-body { width: 100%; }
     @media (max-width: 768px) {
       body { padding: 0.5rem; }
       .grid-element { grid-column: span 12 !important; }
@@ -7123,6 +8519,40 @@ ${pagesMarkup}
   document.getElementById('undoBtn').onclick = undoLayout;
   document.getElementById('redoBtn').onclick = redoLayout;
   document.getElementById('savePresetBtn').onclick = saveCustomPreset;
+  document.getElementById('importPrototypePagesBtn').addEventListener('click', () => {
+    closeHeaderMenu();
+    document.getElementById('prototypePagesFileInput').click();
+  });
+  document.getElementById('prototypePagesFileInput').addEventListener('change', async event => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    try {
+      const blueprint = JSON.parse(await file.text());
+      const records = validatePageBlueprint(blueprint);
+      openPageBlueprintChoice(records, blueprint.title);
+    } catch (error) {
+      showToast('Could not import page blueprint. Check that it is valid Layout Maker JSON.');
+    } finally {
+      input.value = '';
+    }
+  });
+
+  function loadPageBlueprintFromUrl() {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('payload')) return;
+
+    try {
+      const blueprint = JSON.parse(url.searchParams.get('payload'));
+      const records = validatePageBlueprint(blueprint);
+      commitImportedPages(records, 'new', blueprint.title);
+      url.searchParams.delete('payload');
+      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    } catch (error) {
+      showToast('Could not load layout from URL. Check that the payload is valid Layout Maker JSON.');
+    }
+  }
+
   document.getElementById('saveElementSetBtn').onclick = saveElementSet;
 
   function showToast(msg) {
@@ -8005,13 +9435,13 @@ ${pagesMarkup}
     return copied;
   }
 
-  async function copyPayloadToClipboard(htmlStr) {
+  async function copyPayloadToClipboard(htmlStr, plainText = 'Lucid Payload Copied') {
     if (navigator.clipboard?.write && window.ClipboardItem) {
       try {
         await navigator.clipboard.write([
           new ClipboardItem({
             'text/html': new Blob([htmlStr], { type: 'text/html' }),
-            'text/plain': new Blob(['Lucid Payload Copied'], { type: 'text/plain' })
+            'text/plain': new Blob([plainText], { type: 'text/plain' })
           })
         ]);
         return 'rich';
@@ -8023,11 +9453,16 @@ ${pagesMarkup}
     if (copyRichTextFallback(htmlStr)) return 'rich';
 
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(htmlStr);
+      await navigator.clipboard.writeText(plainText);
       return 'plain';
     }
 
     throw new Error('This browser did not grant clipboard access.');
+  }
+
+  function getSelectedCopyScale() {
+    const scale = Number.parseFloat(document.getElementById('copyScaleSelect')?.value);
+    return Number.isFinite(scale) && scale > 0 ? scale : 1.5;
   }
 
   document.getElementById('copyLucidBtn').addEventListener('click', async () => {
@@ -8035,9 +9470,11 @@ ${pagesMarkup}
 
     const objects = [];
     const rootIds = [];
+    const clipboardTables = [];
+    const copyScale = getSelectedCopyScale();
     // Forces fixed coordinate calculations regardless of screen zoom. 
-    const PAGE_WIDTH = 1200; 
-    let currentY = -8000;
+    const PAGE_WIDTH = 1200 * copyScale;
+    let currentY = -8000 * copyScale;
     let globalZ = 1000;
 
     sections.forEach((sec) => {
@@ -8045,7 +9482,7 @@ ${pagesMarkup}
       if (!gridDOM) return;
 
       const SCALE = PAGE_WIDTH / gridDOM.offsetWidth;
-      const FONT_MULT = 1;
+      const FONT_MULT = copyScale;
 
       let maxSecH = 0;
       const sectionMemberIds = [];
@@ -8054,31 +9491,62 @@ ${pagesMarkup}
         const elDOM = document.getElementById(`dom_${el.id}`);
         if (!elDOM) return;
 
-        const lx = 4800 + (elDOM.offsetLeft * SCALE);
+        const lx = (4800 * copyScale) + (elDOM.offsetLeft * SCALE);
         const ly = currentY + (elDOM.offsetTop * SCALE);
         const lw = elDOM.offsetWidth * SCALE;
         const lh = elDOM.offsetHeight * SCALE;
-        const scaledFontSize = Math.max(10, Math.round((el.fontSize || 14) * FONT_MULT));
+        const autoFontSize = isAutoFontSize(el.fontSize);
+        const scaledFontSize = Math.max(10, Math.round((autoFontSize ? 14 : (Number(el.fontSize) || 14)) * FONT_MULT));
+        const lucidDynamicFontSize = autoFontSize
+          ? { min: 2.2222222222222223, max: 213.33333333333334, h: true, p: 1 }
+          : false;
         
         maxSecH = Math.max(maxSecH, (elDOM.offsetTop + elDOM.offsetHeight) * SCALE);
 
         if (el.type === 'badge') {
           // Pill + Text Box for Badges
           ensureCompositeTextFields(el);
-          const badgeText = el.badgeText || '[Standard]';
-          const bodyText = el.badgeBody || '';
+          const badgeText = toLucidPlainText(el.badgeText) || '[Standard]';
+          const bodyText = toLucidPlainText(el.badgeBody);
           const badgeTextEnd = Math.max(1, badgeText.length);
-          const pillHeight = Math.min(32 * SCALE, lh);
-          const pillY = ly + Math.max(0, (lh - pillHeight) / 2);
+          const badgeLayout = getBadgeLayout(el, getActivePage());
+          const badgeAlign = getBadgeAlign(el, badgeLayout);
+          const pageScale = Number.parseFloat(getComputedStyle(canvasContainer).getPropertyValue('--page-scale')) || 1;
+          const elementRect = elDOM.getBoundingClientRect();
+          const toLucidBox = node => {
+            const rect = node.getBoundingClientRect();
+            return {
+              x: lx + ((rect.left - elementRect.left) / pageScale) * SCALE,
+              y: ly + ((rect.top - elementRect.top) / pageScale) * SCALE,
+              w: (rect.width / pageScale) * SCALE,
+              h: (rect.height / pageScale) * SCALE
+            };
+          };
+          const pillNode = elDOM.querySelector('.badge-pill');
+          const pillBox = pillNode ? toLucidBox(pillNode) : { x: lx, y: ly, w: 140 * SCALE, h: Math.min(32 * SCALE, lh) };
+
+          if (el.hasBorder === true) {
+            const borderId = el.id + '_widget_border';
+            objects.push({
+              id: borderId, IsBlock: true, HiddenLocally: false,
+              Action: { Action: "CreateBlock", Class: "SparkRectangleBlock", Properties: {
+                BG: 0, ZOrder: globalZ++, BoundingBox: { x: lx, y: ly, w: lw, h: lh },
+                FillColor: 'unset', LineColor: toLucidColor(el.borderColor || '#cbd5e1'), LineWidth: 1, Rounding: 4, InsetMargin: 0,
+                TextAlign: 'left', TextVAlign: 'top', Text_VAlign: 'top', Text: ''
+              }}
+            });
+            sectionMemberIds.push(borderId);
+          }
 
           const pillId = el.id + '_pill';
           objects.push({
             id: pillId, IsBlock: true, HiddenLocally: false,
             Action: { Action: "CreateBlock", Class: "SparkRectangleBlock", Properties: {
-              BG: 0, ZOrder: globalZ++, BoundingBox: { x: lx, y: pillY, w: 140 * SCALE, h: pillHeight },
+              BG: 0, ZOrder: globalZ++, BoundingBox: pillBox,
               FillColor: el.badgeFill || '#1c324a', LineColor: el.badgeHasBorder === true ? toLucidColor(el.badgeBorderColor || '#cbd5e1') : 'unset', LineWidth: el.badgeHasBorder === true ? 1 : 0, Rounding: 50,
               TextAlign: "center", TextVAlign: "middle", Text_VAlign: "middle",
               DefaultTextStyle: { align: "center", color: toLucidColor(el.badgeTextColor || '#ffffff'), size: scaledFontSize, bold: true },
+              Text_DynamicFontSize: lucidDynamicFontSize,
               Text: { t: badgeText, m: [{ s:0, n:"a", v:"center", e: badgeTextEnd }, { s:0, n:"b", v:true, e: badgeTextEnd }, { s:0, n:"s", v: scaledFontSize, e: badgeTextEnd }, { s:0, n:"c", v:toLucidColor(el.badgeTextColor || '#ffffff'), e: badgeTextEnd }] }
             }}
           });
@@ -8087,14 +9555,22 @@ ${pagesMarkup}
           if (bodyText) {
             const txtId = el.id + '_txt';
             const bodyTextEnd = Math.max(1, bodyText.length);
+            const bodyNode = elDOM.querySelector('.badge-body');
+            const bodyBox = bodyNode ? toLucidBox(bodyNode) : { x: lx + (150 * SCALE), y: ly, w: Math.max(15 * SCALE, lw - (150 * SCALE)), h: lh };
+            if (bodyNode && badgeLayout === 'vertical') {
+              const elementStyle = getComputedStyle(elDOM);
+              const bottomInset = (parseFloat(elementStyle.paddingBottom) || 0) + (parseFloat(elementStyle.borderBottomWidth) || 0);
+              bodyBox.h = Math.max(bodyBox.h, lh - (bodyBox.y - ly) - (bottomInset * SCALE));
+            }
             objects.push({
               id: txtId, IsBlock: true, HiddenLocally: false,
               Action: { Action: "CreateBlock", Class: "AutoGrowTextBlock", Properties: {
-                BG: 0, ZOrder: globalZ++, BoundingBox: { x: lx + (150 * SCALE), y: ly, w: lw - (150 * SCALE), h: lh },
+                BG: 0, ZOrder: globalZ++, BoundingBox: bodyBox,
                 FillColor: el.badgeBodyFill && el.badgeBodyFill !== 'transparent' ? toLucidColor(el.badgeBodyFill) : 'unset', LineColor: el.badgeBodyHasBorder === true ? toLucidColor(el.badgeBodyBorderColor || '#cbd5e1') : 'unset', LineWidth: el.badgeBodyHasBorder === true ? 1 : 0, InsetMargin: 0,
-                TextAlign: "left", TextVAlign: "middle", Text_VAlign: "middle",
+                TextAlign: "left", TextVAlign: "top", Text_VAlign: "top",
                 FixedWidth: true, FixedHeight: true, TextWrap: "fit",
                 DefaultTextStyle: { align: "left", color: toLucidColor(el.badgeBodyTextColor || '#1c324a'), size: scaledFontSize },
+                Text_DynamicFontSize: lucidDynamicFontSize,
                 Text: { t: bodyText, m: [{ s:0, n:"a", v:"left", e: bodyTextEnd }, { s:0, n:"s", v: scaledFontSize, e: bodyTextEnd }, { s:0, n:"c", v: toLucidColor(el.badgeBodyTextColor || '#1c324a'), e: bodyTextEnd }] }
               }}
             });
@@ -8104,8 +9580,8 @@ ${pagesMarkup}
         } else if (el.type === 'accordion') {
           // Header Bar + Dropdown Body Container for Accordions
           ensureCompositeTextFields(el);
-          const title = el.accordionTitle || 'Topic';
-          const bodyText = el.accordionBody || '';
+          const title = toLucidPlainText(el.accordionTitle) || 'Topic';
+          const bodyText = toLucidPlainText(el.accordionBody);
           const headerTextColor = el.headerTextColor || '#ffffff';
           const headerText = (el.expanded ? '▼ ' : '► ') + title;
           const headerTextEnd = Math.max(1, headerText.length);
@@ -8119,6 +9595,7 @@ ${pagesMarkup}
               FillColor: el.fill || '#1c3a6e', LineColor: el.hasBorder === true ? toLucidColor(el.borderColor || '#cbd5e1') : 'unset', LineWidth: el.hasBorder === true ? 1 : 0, Rounding: 4, InsetMargin: 12,
               TextAlign: "left", TextVAlign: "middle", Text_VAlign: "middle",
               DefaultTextStyle: { align: "left", color: toLucidColor(headerTextColor), size: scaledFontSize, bold: true },
+              Text_DynamicFontSize: lucidDynamicFontSize,
               Text: { t: headerText, m: [{ s:0, n:"a", v:"left", e: headerTextEnd }, { s:0, n:"b", v:true, e: headerTextEnd }, { s:0, n:"s", v: scaledFontSize, e: headerTextEnd }, { s:0, n:"c", v: toLucidColor(headerTextColor), e: headerTextEnd }] }
             }}
           });
@@ -8134,6 +9611,7 @@ ${pagesMarkup}
                 FillColor: '#f8fafc', LineColor: '#cbd5e1', LineWidth: 1, Rounding: 4, InsetMargin: 12,
                 TextAlign: "left", TextVAlign: "top", Text_VAlign: "top",
                 DefaultTextStyle: { align: "left", color: toLucidColor(el.textColor), size: scaledFontSize },
+                Text_DynamicFontSize: lucidDynamicFontSize,
                 Text: { t: bodyText, m: [{ s:0, n:"a", v:"left", e: bodyTextEnd }, { s:0, n:"s", v: scaledFontSize, e: bodyTextEnd }, { s:0, n:"c", v: toLucidColor(el.textColor), e: bodyTextEnd }] }
               }}
             });
@@ -8157,7 +9635,8 @@ ${pagesMarkup}
 
           if (el.showCaption !== false) {
             const capId = el.id + '_cap';
-            const captionTextEnd = Math.max(1, String(el.text || '').length);
+            const captionText = toLucidPlainText(el.text);
+            const captionTextEnd = Math.max(1, captionText.length);
             const captionAlign = ['left', 'center', 'right'].includes(el.captionAlign) ? el.captionAlign : 'left';
             objects.push({
               id: capId, IsBlock: true, HiddenLocally: false,
@@ -8167,24 +9646,24 @@ ${pagesMarkup}
                 TextAlign: captionAlign, TextVAlign: "top", Text_VAlign: "top",
                 FixedWidth: true, FixedHeight: false, TextWrap: "fit",
                 DefaultTextStyle: { size: scaledFontSize, align: captionAlign, color: toLucidColor(el.textColor), bold: el.type === 'graph' },
-                Text: { t: el.text, m: [{ s:0, n:"a", v: captionAlign, e: captionTextEnd }, { s:0, n:"s", v: scaledFontSize, e: captionTextEnd }, { s:0, n:"c", v: toLucidColor(el.textColor), e: captionTextEnd }] }
+                Text_DynamicFontSize: lucidDynamicFontSize,
+                Text: { t: captionText, m: [{ s:0, n:"a", v: captionAlign, e: captionTextEnd }, { s:0, n:"s", v: scaledFontSize, e: captionTextEnd }, { s:0, n:"c", v: toLucidColor(el.textColor), e: captionTextEnd }] }
               }}
             });
             sectionMemberIds.push(capId);
           }
         } else if (el.type === 'dataTable') {
           ensureCompositeTextFields(el);
-          objects.push(createLucidSvgImageObject({
-            id: el.id,
+          const tableRows = parseDataTableRows(el.tableBody);
+          objects.push(createLucidDataTableObject(el, {
             x: lx,
             y: ly,
             w: lw,
             h: lh,
-            svgMarkup: buildSvgPlaceholderMarkup(el, 'table', false, lw, lh),
             zOrder: globalZ++,
-            lineColor: el.hasBorder === true ? toLucidColor(el.borderColor || '#cbd5e1') : 'unset',
-            lineWidth: el.hasBorder === true ? 1 : 0
+            fontSize: scaledFontSize
           }));
+          clipboardTables.push({ el, rows: tableRows });
           sectionMemberIds.push(el.id);
         } else if (el.type === 'spacer') {
           objects.push({
@@ -8208,12 +9687,14 @@ ${pagesMarkup}
           });
           sectionMemberIds.push(el.id);
         } else {
-          let exportText = el.text;
+          const exportText = toLucidPlainText(el.text);
           const isHeadingLike = el.type === 'heading' || el.type === 'subheading';
-          let blockClass = (el.type === 'bodyText' || el.type === 'heading' || el.type === 'subheading') ? 'AutoGrowTextBlock' : 'SparkRectangleBlock';
-          let borderW = el.hasBorder === true ? 1 : 0;
-          let borderColor = el.hasBorder === true ? toLucidColor(el.borderColor || '#cbd5e1') : 'unset';
-          let fillCol = (blockClass === 'AutoGrowTextBlock' || el.hasBackground !== true) ? 'unset' : (el.fill || '#ffffff');
+          let blockClass = (el.type === 'heading' || el.type === 'subheading') ? 'AutoGrowTextBlock' : 'SparkRectangleBlock';
+          let borderW = el.hasBorder === true ? 1 : (el.type === 'bodyText' ? 1 : 0);
+          let borderColor = el.hasBorder === true ? toLucidColor(el.borderColor || '#cbd5e1') : (el.type === 'bodyText' ? toLucidColor('#cbd5e1') : 'unset');
+          let fillCol = el.type === 'bodyText'
+            ? (el.fill && el.fill !== 'transparent' ? el.fill : '#f8fafc')
+            : (el.hasBackground === true ? (el.fill || '#ffffff') : 'unset');
             const exportTextEnd = Math.max(1, String(exportText || '').length);
 
           let textMarkup = [
@@ -8224,14 +9705,16 @@ ${pagesMarkup}
 
             if (el.type === 'heading' || el.type === 'subheading') textMarkup.push({ s:0, n:"b", v: true, e: exportTextEnd });
 
+          const lucidVerticalAlign = getVerticalAlign(el) === 'center' ? 'middle' : getVerticalAlign(el);
           objects.push({
             id: el.id, IsBlock: true, HiddenLocally: false,
             Action: { Action: "CreateBlock", Class: blockClass, Properties: {
               BG: 0, ZOrder: globalZ++, BoundingBox: { x: lx, y: ly, w: lw, h: lh },
               FillColor: fillCol, LineColor: borderColor, LineWidth: borderW, Rounding: borderW ? 8 : 0, InsetMargin: 12,
-              TextAlign: "left", TextVAlign: isHeadingLike ? "middle" : "top", Text_VAlign: isHeadingLike ? "middle" : "top",
+              TextAlign: "left", TextVAlign: lucidVerticalAlign, Text_VAlign: lucidVerticalAlign,
               FixedWidth: true, FixedHeight: false, TextWrap: "fit",
               DefaultTextStyle: { align: "left", bold: (el.type === 'heading' || el.type === 'subheading'), color: toLucidColor(el.textColor), size: scaledFontSize },
+              Text_DynamicFontSize: lucidDynamicFontSize,
               Text: { t: exportText, m: textMarkup }
             }}
           });
@@ -8270,22 +9753,485 @@ ${pagesMarkup}
     });
 
     const payload = {
-      Objects: objects, CopiedItemIds: rootIds, BCUVersion: 160,
-      Base: { x: 5400, y: -7200 }, Page: "0_0", Size: { w: PAGE_WIDTH, h: 2200 },
-      Plugins: ["/js/plugins/v2/default.js", "/js/plugins/v2/userimage.js", "/js/plugins/v2/flowchart.js", "/js/plugins/v2/sparkshapes.js"],
+      Objects: objects, CopiedItemIds: rootIds, BCUVersion: 164,
+      Base: { x: 5400 * copyScale, y: -7200 * copyScale }, Page: "0_0", Size: { w: PAGE_WIDTH, h: 2200 * copyScale },
+      Plugins: ["/js/plugins/v2/default.js", "/js/plugins/v2/userimage.js", "/js/plugins/v2/flowchart.js", "/js/plugins/v2/sparkshapes.js", "/js/plugins/v2/table.js"],
       Document: "export-doc", Elements: {}, Pages: {}
     };
 
     const jsonStr = JSON.stringify(payload).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const htmlStr = `<html><body><!--StartFragment--><span data-lucid-type="application/vnd.lucid.chart.objects" data-lucid-content="${jsonStr}"></span><!--EndFragment--></body></html>`;
+    const htmlTables = clipboardTables.map(({ el }) => buildDataTableMarkup(el, { clipboard: true })).join('');
+    const plainText = clipboardTables.map(({ rows }) => rows.map(row => row.join('\t')).join('\n')).join('\n\n') || 'Lucid Payload Copied';
+    const htmlStr = `<html><body><!--StartFragment--><span data-lucid-type="application/vnd.lucid.chart.objects" data-lucid-content="${jsonStr}">${htmlTables}</span><!--EndFragment--></body></html>`;
 
     try {
-      const copyMode = await copyPayloadToClipboard(htmlStr);
+      const copyMode = await copyPayloadToClipboard(htmlStr, plainText);
       showToast(copyMode === 'rich'
         ? 'Payload Copied! Paste (Ctrl+V) into Lucidchart.'
         : 'Payload copied as text. Enable clipboard permissions for Lucidchart paste.');
     } catch(err) {
       showToast(`Copy Failed: ${err.message}`);
+    }
+  });
+
+  function getLucidMontageGridPlacements(elements) {
+    const occupiedCells = new Set();
+    const placements = [];
+    let rowCount = 1;
+
+    elements.forEach(element => {
+      const colSpan = Math.max(1, Math.min(12, Math.floor(Number(element.colSpan) || 12)));
+      const rowSpan = Math.max(1, Math.floor(Number(getEffectiveRowSpan(element)) || 1));
+      let placed = false;
+      let row = 0;
+
+      while (!placed) {
+        for (let col = 0; col <= 12 - colSpan; col++) {
+          let fits = true;
+          for (let rowOffset = 0; rowOffset < rowSpan && fits; rowOffset++) {
+            for (let colOffset = 0; colOffset < colSpan; colOffset++) {
+              if (occupiedCells.has((row + rowOffset) * 12 + col + colOffset)) {
+                fits = false;
+                break;
+              }
+            }
+          }
+          if (!fits) continue;
+
+          for (let rowOffset = 0; rowOffset < rowSpan; rowOffset++) {
+            for (let colOffset = 0; colOffset < colSpan; colOffset++) {
+              occupiedCells.add((row + rowOffset) * 12 + col + colOffset);
+            }
+          }
+          placements.push({ element, row, col, colSpan, rowSpan });
+          rowCount = Math.max(rowCount, row + rowSpan);
+          placed = true;
+          break;
+        }
+        if (!placed) row++;
+      }
+    });
+
+    return { placements, rowCount };
+  }
+
+  function createLucidMontageTextBlock({
+    id, type, text, x, y, w, h, zOrder, fontSize, textColor = '#333333',
+    fillColor = 'unset', lineColor = 'unset', lineWidth = 0, rounding = 0,
+    textAlign = 'left', textVAlign = 'top', bold = false, insetMargin = 12
+  }) {
+    const cleanText = toLucidPlainText(text);
+    const textEnd = Math.max(1, cleanText.length);
+    const blockClass = ['heading', 'subheading', 'badgeBodyText'].includes(type) ? 'AutoGrowTextBlock' : 'SparkRectangleBlock';
+    const color = toLucidColor(textColor);
+    return {
+      id,
+      IsBlock: true,
+      HiddenLocally: false,
+      Action: {
+        Action: 'CreateBlock',
+        Class: blockClass,
+        Properties: {
+          BG: 0,
+          ZOrder: zOrder,
+          BoundingBox: { x, y, w, h },
+          FillColor: fillColor,
+          LineColor: lineColor,
+          LineWidth: lineWidth,
+          Rounding: rounding,
+          InsetMargin: insetMargin,
+          TextAlign: textAlign,
+          TextVAlign: textVAlign,
+          Text_VAlign: textVAlign,
+          FixedWidth: true,
+          FixedHeight: false,
+          TextWrap: 'fit',
+          DefaultTextStyle: { align: textAlign, bold, color, size: fontSize },
+          Text_DynamicFontSize: false,
+          Text: {
+            t: cleanText,
+            m: [
+              { s: 0, n: 'a', v: textAlign, e: textEnd },
+              { s: 0, n: 's', v: fontSize, e: textEnd },
+              { s: 0, n: 'c', v: color, e: textEnd },
+              ...(bold ? [{ s: 0, n: 'b', v: true, e: textEnd }] : [])
+            ]
+          }
+        }
+      }
+    };
+  }
+
+  function buildLucidMontagePayload(copyScale = getSelectedCopyScale()) {
+    syncActivePageSections();
+    const imgPages = pages.filter(page => page.pageType === 'IMG');
+    const tpgPages = pages.filter(page => page.pageType === 'TPG');
+    const unsupportedPages = pages.filter(page => !['IMG', 'TPG'].includes(page.pageType));
+    if (!imgPages.length || !tpgPages.length || unsupportedPages.length) {
+      throw new Error('The active document must contain only IMG and TPG pages to make a two-row copy.');
+    }
+
+    const objects = [];
+    const clipboardTables = [];
+    const rowGroupIds = [];
+    const pageWidth = 1200 * copyScale;
+    const basePageWidth = 816;
+    const layoutScale = pageWidth / basePageWidth;
+    const pageHeight = pages.reduce((maxHeight, page) => {
+      const pageWidthPx = Number(page.widthPx) || basePageWidth;
+      const pageHeightPx = Number(page.heightPx) || 1056;
+      return Math.max(maxHeight, pageWidth * (pageHeightPx / pageWidthPx));
+    }, pageWidth * (1056 / basePageWidth));
+    const pageGap = 48 * layoutScale;
+    const rowGap = 72 * layoutScale;
+    const pageMargin = 32 * layoutScale;
+    const sectionPadding = 12 * layoutScale;
+    const gridGap = 12 * layoutScale;
+    const rowLabelHeight = 44 * layoutScale;
+    const rowLabelGap = 16 * layoutScale;
+    const originX = 4800 * copyScale;
+    const originY = -8000 * copyScale;
+    const firstPageY = originY + rowLabelHeight + rowLabelGap;
+    const secondLabelY = firstPageY + pageHeight + rowGap;
+    const montagePageGroups = { IMG: [], TPG: [] };
+    let globalZ = 1000;
+
+    const addGroup = (id, name, memberIds) => {
+      const members = {};
+      memberIds.forEach(memberId => { members[memberId] = true; });
+      objects.push({
+        id,
+        IsGroup: true,
+        HiddenLocally: false,
+        Action: { Action: 'CrGr', Properties: { BG: 0, ZOrder: globalZ++, Members: members, Name: name } }
+      });
+    };
+
+    const addPage = (page, pageType, pageIndex, pageY) => {
+      const pageX = originX + (pageIndex * (pageWidth + pageGap));
+      const pageGroupId = `${page.id}_montage_group`;
+      const pageMemberIds = [];
+      const pageBackgroundId = `${page.id}_montage_background`;
+      objects.push(createLucidMontageTextBlock({
+        id: pageBackgroundId,
+        type: 'callout',
+        text: '',
+        x: pageX,
+        y: pageY,
+        w: pageWidth,
+        h: pageHeight,
+        zOrder: globalZ++,
+        fontSize: Math.max(10, Math.round(12 * copyScale)),
+        fillColor: page.bg || '#ffffff',
+        lineColor: toLucidColor('#cbd5e1'),
+        lineWidth: 1,
+        rounding: 4,
+        insetMargin: 0
+      }));
+      pageMemberIds.push(pageBackgroundId);
+
+      const pageSections = Array.isArray(page.sections) ? page.sections : [];
+      const sectionCount = Math.max(1, pageSections.length);
+      const sectionGap = 12 * layoutScale;
+      const sectionWidth = pageWidth - (2 * pageMargin);
+      const sectionHeight = (pageHeight - (2 * pageMargin) - (sectionGap * (sectionCount - 1))) / sectionCount;
+
+      pageSections.forEach((section, sectionIndex) => {
+        const sectionId = `${section.id}_montage_${pageType}_${pageIndex}`;
+        const sectionMemberIds = [];
+        const sectionX = pageX + pageMargin;
+        const sectionY = pageY + pageMargin + (sectionIndex * (sectionHeight + sectionGap));
+        if (section.hasBackground !== false && section.bg && section.bg !== 'transparent') {
+          const sectionBackgroundId = `${sectionId}_background`;
+          objects.push(createLucidMontageTextBlock({
+            id: sectionBackgroundId,
+            type: 'callout',
+            text: '',
+            x: sectionX,
+            y: sectionY,
+            w: sectionWidth,
+            h: sectionHeight,
+            zOrder: globalZ++,
+            fontSize: Math.max(10, Math.round(12 * copyScale)),
+            fillColor: section.bg,
+            rounding: 6,
+            insetMargin: 0
+          }));
+          sectionMemberIds.push(sectionBackgroundId);
+        }
+
+        const gridX = sectionX + sectionPadding;
+        const gridY = sectionY + sectionPadding;
+        const gridWidth = Math.max(12, sectionWidth - (2 * sectionPadding));
+        const gridHeight = Math.max(12, sectionHeight - (2 * sectionPadding));
+        const grid = getLucidMontageGridPlacements(section.elements || []);
+        const cellWidth = Math.max(1, (gridWidth - (11 * gridGap)) / 12);
+        const rowHeight = Math.max(1, (gridHeight - (gridGap * (grid.rowCount - 1))) / grid.rowCount);
+
+        grid.placements.forEach(({ element, row, col, colSpan, rowSpan }, elementIndex) => {
+          const x = gridX + (col * (cellWidth + gridGap));
+          const y = gridY + (row * (rowHeight + gridGap));
+          const w = (colSpan * cellWidth) + ((colSpan - 1) * gridGap);
+          const h = (rowSpan * rowHeight) + ((rowSpan - 1) * gridGap);
+          const fontSize = Math.max(10, Math.round((isAutoFontSize(element.fontSize) ? 14 : (Number(element.fontSize) || 14)) * copyScale));
+          const elementId = `${page.id}_${section.id}_${element.id || elementIndex}_montage`;
+          const borderColor = element.hasBorder === true ? toLucidColor(element.borderColor || '#cbd5e1') : 'unset';
+          const borderWidth = element.hasBorder === true ? 1 : 0;
+
+          if (element.type === 'badge') {
+            const badgeText = toLucidPlainText(element.badgeText || '[Standard]');
+            const badgeBody = toLucidPlainText(element.badgeBody || '');
+            const badgeLayout = getBadgeLayout(element, page);
+            const badgeAlign = getBadgeAlign(element, badgeLayout);
+            const pillHeight = Math.min(h, Math.max(30 * layoutScale, fontSize * 1.8));
+            const desiredPillWidth = Math.max(96 * layoutScale, (badgeText.length * fontSize * 0.58) + (24 * layoutScale));
+            const pillWidth = Math.min(w, desiredPillWidth);
+            const pillX = badgeLayout === 'vertical' && badgeAlign === 'center'
+              ? x + ((w - pillWidth) / 2)
+              : badgeLayout === 'vertical' && badgeAlign === 'end'
+                ? x + w - pillWidth
+                : x;
+            const pillY = badgeLayout === 'vertical' ? y : y + Math.max(0, (h - pillHeight) / 2);
+            const pillId = `${elementId}_pill`;
+            objects.push(createLucidMontageTextBlock({
+              id: pillId,
+              type: 'badge',
+              text: badgeText,
+              x: pillX,
+              y: pillY,
+              w: pillWidth,
+              h: pillHeight,
+              zOrder: globalZ++,
+              fontSize,
+              textColor: element.badgeTextColor || '#ffffff',
+              fillColor: element.badgeFill || '#1c324a',
+              lineColor: element.badgeHasBorder === true ? toLucidColor(element.badgeBorderColor || '#cbd5e1') : 'unset',
+              lineWidth: element.badgeHasBorder === true ? 1 : 0,
+              rounding: 50,
+              textAlign: 'center',
+              textVAlign: 'middle',
+              bold: true,
+              insetMargin: 6 * layoutScale
+            }));
+            sectionMemberIds.push(pillId);
+            if (badgeBody) {
+              const bodyX = badgeLayout === 'horizontal' ? x + pillWidth + (6 * layoutScale) : x;
+              const bodyY = badgeLayout === 'vertical' ? y + pillHeight + (6 * layoutScale) : y;
+              const bodyW = Math.max(1, badgeLayout === 'horizontal' ? w - pillWidth - (6 * layoutScale) : w);
+              const bodyH = Math.max(1, badgeLayout === 'vertical' ? h - pillHeight - (6 * layoutScale) : h);
+              const bodyId = `${elementId}_body`;
+              objects.push(createLucidMontageTextBlock({
+                id: bodyId,
+                type: 'badgeBodyText',
+                text: badgeBody,
+                x: bodyX,
+                y: bodyY,
+                w: bodyW,
+                h: bodyH,
+                zOrder: globalZ++,
+                fontSize,
+                textColor: element.badgeBodyTextColor || element.textColor || '#1c324a',
+                fillColor: element.badgeBodyFill && element.badgeBodyFill !== 'transparent' ? element.badgeBodyFill : 'unset',
+                lineColor: element.badgeBodyHasBorder === true ? toLucidColor(element.badgeBodyBorderColor || '#cbd5e1') : 'unset',
+                lineWidth: element.badgeBodyHasBorder === true ? 1 : 0,
+                insetMargin: 4 * layoutScale
+              }));
+              sectionMemberIds.push(bodyId);
+            }
+          } else if (element.type === 'accordion') {
+            const headerId = `${elementId}_header`;
+            const headerHeight = Math.min(h, 40 * layoutScale);
+            objects.push(createLucidMontageTextBlock({
+              id: headerId,
+              type: 'callout',
+              text: `${element.expanded ? 'v' : '>'} ${toLucidPlainText(element.accordionTitle || 'Topic')}`,
+              x,
+              y,
+              w,
+              h: headerHeight,
+              zOrder: globalZ++,
+              fontSize,
+              textColor: element.headerTextColor || '#ffffff',
+              fillColor: element.fill || '#1c3a6e',
+              lineColor: borderColor,
+              lineWidth: borderWidth,
+              rounding: 4,
+              bold: true
+            }));
+            sectionMemberIds.push(headerId);
+            if (element.expanded && element.accordionBody) {
+              const bodyId = `${elementId}_body`;
+              objects.push(createLucidMontageTextBlock({
+                id: bodyId,
+                type: 'callout',
+                text: element.accordionBody,
+                x,
+                y: y + headerHeight,
+                w,
+                h: Math.max(1, h - headerHeight),
+                zOrder: globalZ++,
+                fontSize,
+                textColor: element.textColor || '#0f172a',
+                fillColor: '#f8fafc',
+                lineColor: '#cbd5e1',
+                lineWidth: 1,
+                rounding: 4
+              }));
+              sectionMemberIds.push(bodyId);
+            }
+          } else if (element.type === 'imageCard' || element.type === 'graph') {
+            const captionHeight = element.showCaption === false ? 0 : Math.min(h * 0.3, 56 * layoutScale);
+            const mediaHeight = Math.max(1, h - captionHeight);
+            objects.push(createLucidSvgImageObject({
+              id: elementId,
+              x,
+              y,
+              w,
+              h: mediaHeight,
+              svgMarkup: buildSvgPlaceholderMarkup(element, element.type === 'graph' ? 'graph' : 'media', false, w, mediaHeight),
+              zOrder: globalZ++,
+              lineColor: borderColor,
+              lineWidth: borderWidth
+            }));
+            sectionMemberIds.push(elementId);
+            if (captionHeight > 0) {
+              const captionId = `${elementId}_caption`;
+              objects.push(createLucidMontageTextBlock({
+                id: captionId,
+                type: element.type,
+                text: element.text,
+                x,
+                y: y + mediaHeight,
+                w,
+                h: captionHeight,
+                zOrder: globalZ++,
+                fontSize,
+                textColor: element.textColor || '#475569',
+                fillColor: '#f8fafc',
+                textAlign: element.captionAlign || 'left',
+                bold: element.type === 'graph'
+              }));
+              sectionMemberIds.push(captionId);
+            }
+          } else if (element.type === 'dataTable') {
+            const tableRows = parseDataTableRows(element.tableBody);
+            objects.push(createLucidDataTableObject({ ...element, id: elementId }, {
+              x, y, w, h, zOrder: globalZ++, fontSize
+            }));
+            clipboardTables.push({ el: element, rows: tableRows });
+            sectionMemberIds.push(elementId);
+          } else if (element.type === 'spacer') {
+            const spacerId = `${elementId}_spacer`;
+            objects.push(createLucidMontageTextBlock({
+              id: spacerId,
+              type: 'spacer',
+              text: '',
+              x, y, w, h,
+              zOrder: globalZ++,
+              fontSize,
+              insetMargin: 0
+            }));
+            sectionMemberIds.push(spacerId);
+          } else {
+            const text = element.type === 'icon'
+              ? (/question|help/i.test(`${element.name || ''} ${element.iconName || ''}`) ? '?' : '')
+              : element.text;
+            const textId = elementId;
+            objects.push(createLucidMontageTextBlock({
+              id: textId,
+              type: element.type,
+              text,
+              x, y, w, h,
+              zOrder: globalZ++,
+              fontSize: element.type === 'icon' ? Math.max(fontSize, Number(element.iconSize) || 24) : fontSize,
+              textColor: element.type === 'icon' ? (element.iconColor || element.textColor || '#2563eb') : (element.textColor || '#333333'),
+              fillColor: element.type === 'bodyText'
+                ? (element.fill && element.fill !== 'transparent' ? element.fill : '#f8fafc')
+                : (element.hasBackground === true ? (element.fill || '#ffffff') : 'unset'),
+              lineColor: element.type === 'bodyText' && element.hasBorder !== true ? toLucidColor('#cbd5e1') : borderColor,
+              lineWidth: element.type === 'bodyText' && element.hasBorder !== true ? 1 : borderWidth,
+              rounding: element.type === 'bodyText' || borderWidth ? 8 : 0,
+              textAlign: element.type === 'icon' ? 'center' : 'left',
+              textVAlign: element.type === 'icon' ? 'middle' : 'top',
+              bold: element.type === 'heading' || element.type === 'subheading'
+            }));
+            sectionMemberIds.push(textId);
+          }
+        });
+
+        const sectionGroupId = `${sectionId}_group`;
+        addGroup(sectionGroupId, section.title || 'Page section', sectionMemberIds);
+        pageMemberIds.push(sectionGroupId);
+      });
+
+      addGroup(pageGroupId, `${pageType} ${page.pageNumber || pageIndex + 1} | ${page.title || ''}`, pageMemberIds);
+      montagePageGroups[pageType].push(pageGroupId);
+    };
+
+    const addRow = (pageType, rowPages, rowIndex) => {
+      const rowY = rowIndex === 0 ? originY : secondLabelY;
+      const rowId = `montage_${pageType.toLowerCase()}_row`;
+      const labelId = `${rowId}_label`;
+      objects.push(createLucidMontageTextBlock({
+        id: labelId,
+        type: 'heading',
+        text: `${pageType} - ${pageType === 'IMG' ? 'In-the-Moment Guide' : 'Teacher Planning Guide'} (${rowPages.length} pages)`,
+        x: originX,
+        y: rowY,
+        w: pageWidth,
+        h: rowLabelHeight,
+        zOrder: globalZ++,
+        fontSize: Math.max(14, Math.round(22 * copyScale)),
+        textColor: '#17324d',
+        fillColor: '#eaf4fa',
+        rounding: 4,
+        textVAlign: 'middle',
+        bold: true
+      }));
+      const rowMembers = [labelId];
+      const pageY = rowY + rowLabelHeight + rowLabelGap;
+      rowPages.forEach((page, index) => {
+        addPage(page, pageType, index, pageY);
+        rowMembers.push(montagePageGroups[pageType][index]);
+      });
+      addGroup(rowId, `${pageType} row (${rowPages.length} pages)`, rowMembers);
+      rowGroupIds.push(rowId);
+    };
+
+    addRow('IMG', imgPages, 0);
+    addRow('TPG', tpgPages, 1);
+
+    const maxPagesPerRow = Math.max(imgPages.length, tpgPages.length);
+    const totalWidth = (maxPagesPerRow * pageWidth) + ((maxPagesPerRow - 1) * pageGap);
+    const totalHeight = (2 * (rowLabelHeight + rowLabelGap + pageHeight)) + rowGap;
+    const payload = {
+      Objects: objects,
+      CopiedItemIds: rowGroupIds,
+      BCUVersion: 164,
+      Base: { x: originX + (pageWidth / 2), y: firstPageY + (pageHeight / 2) },
+      Page: '0_0',
+      Size: { w: totalWidth, h: totalHeight },
+      Plugins: ['/js/plugins/v2/default.js', '/js/plugins/v2/userimage.js', '/js/plugins/v2/flowchart.js', '/js/plugins/v2/sparkshapes.js', '/js/plugins/v2/table.js'],
+      Document: 'export-doc',
+      Elements: {},
+      Pages: {}
+    };
+    return { payload, clipboardTables, pageCounts: { IMG: imgPages.length, TPG: tpgPages.length } };
+  }
+
+  document.getElementById('copyAllPagesBtn').addEventListener('click', async () => {
+    try {
+      const { payload, clipboardTables, pageCounts } = buildLucidMontagePayload();
+      const jsonStr = JSON.stringify(payload).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const htmlTables = clipboardTables.map(({ el }) => buildDataTableMarkup(el, { clipboard: true })).join('');
+      const plainText = clipboardTables.map(({ rows }) => rows.map(row => row.join('\t')).join('\n')).join('\n\n') || 'IMG and TPG pages copied';
+      const htmlStr = `<html><body><!--StartFragment--><span data-lucid-type="application/vnd.lucid.chart.objects" data-lucid-content="${jsonStr}">${htmlTables}</span><!--EndFragment--></body></html>`;
+      const copyMode = await copyPayloadToClipboard(htmlStr, plainText);
+      showToast(copyMode === 'rich'
+        ? `Copied ${pageCounts.IMG} IMG and ${pageCounts.TPG} TPG pages as two rows. Paste (Ctrl+V) into Lucidchart.`
+        : 'Pages copied as text. Enable clipboard permissions for Lucidchart paste.');
+    } catch (error) {
+      showToast(`Copy Failed: ${error.message}`);
     }
   });
 
@@ -8643,7 +10589,7 @@ ${pagesMarkup}
         showToast(`PPT Export failed: ${err.message}`);
       }
     } else {
-      showToast('PowerPoint exporter is ready.');
+      showToast('PowerPoint exporter failed to load. Check the connection and refresh.');
     }
   }
 
@@ -8710,6 +10656,15 @@ ${pagesMarkup}
       const tmp = document.createElement('div');
       tmp.innerHTML = htmlStr;
       return tmp.textContent || tmp.innerText || '';
+    };
+
+    const getTextBlockY = (element, y, height, lines, fontSize, inset = 2) => {
+      const lineHeight = fontSize * 1.15;
+      const blockHeight = Math.max(lineHeight, lines.length * lineHeight);
+      const freeSpace = Math.max(0, height - blockHeight - inset * 2);
+      const alignment = getVerticalAlign(element);
+      const offset = alignment === 'center' ? freeSpace / 2 : (alignment === 'bottom' ? freeSpace : 0);
+      return y + inset + offset + fontSize;
     };
 
     pageList.forEach((pg, pIdx) => {
@@ -8820,6 +10775,12 @@ ${pagesMarkup}
         const textRgb = hexToRgb(el.textColor, [15, 23, 42]);
         const borderRgb = (el.hasBorder === true) ? hexToRgb(el.borderColor, [203, 213, 225]) : null;
 
+        if (el.type === 'badge' && borderRgb) {
+          doc.setDrawColor(borderRgb[0], borderRgb[1], borderRgb[2]);
+          doc.setLineWidth(1);
+          doc.rect(elX, elY, elW, elH, 'S');
+        }
+
         // Background shape fill & border
         if (el.type !== 'badge' && el.type !== 'accordion' && el.type !== 'spacer') {
           if (el.hasBackground && fillRgb) {
@@ -8833,7 +10794,8 @@ ${pagesMarkup}
           }
         }
 
-        const fontSize = Math.max(7, Math.min(28, (el.fontSize || 14) * 0.75));
+        const previewFontSize = isAutoFontSize(el.fontSize) ? 14 : (Number(el.fontSize) || 14);
+        const fontSize = Math.max(7, Math.min(28, previewFontSize * 0.75));
         doc.setFontSize(fontSize);
         if (textRgb) doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
 
@@ -8844,7 +10806,7 @@ ${pagesMarkup}
           doc.setFont('helvetica', isHeading ? 'bold' : 'normal');
 
           const textLines = doc.splitTextToSize(cleanText, Math.max(15, elW - 10));
-          doc.text(textLines, elX + 4, elY + fontSize + 2);
+          doc.text(textLines, elX + 4, getTextBlockY(el, elY, elH, textLines, fontSize));
 
           if (el.linkUrl && isHeading) {
             doc.link(elX, elY, elW, elH, { url: el.linkUrl });
@@ -8856,7 +10818,8 @@ ${pagesMarkup}
           doc.setFontSize(Math.min(24, Math.max(12, (el.iconSize || 28) * 0.75)));
           
           const iconLabel = `★ [${el.iconName || 'lucide:star'}]`;
-          doc.text(iconLabel, elX + (elW / 2), elY + (elH / 2) + 3, { align: 'center' });
+          const iconFontSize = doc.getFontSize();
+          doc.text(iconLabel, elX + (elW / 2), getTextBlockY(el, elY, elH, [iconLabel], iconFontSize), { align: 'center' });
         } else if (el.type === 'callout') {
           const calloutFill = hexToRgb(el.fill, [248, 250, 252]);
           doc.setFillColor(calloutFill[0], calloutFill[1], calloutFill[2]);
@@ -8870,25 +10833,53 @@ ${pagesMarkup}
 
           doc.setFont('helvetica', 'normal');
           const lines = doc.splitTextToSize(cleanText, Math.max(15, elW - 12));
-          doc.text(lines, elX + 6, elY + fontSize + 3);
+          doc.text(lines, elX + 6, getTextBlockY(el, elY, elH, lines, fontSize, 3));
         } else if (el.type === 'badge') {
           const pillFill = hexToRgb(el.badgeFill, [28, 50, 74]);
-          const pillText = hexToRgb(el.badgeTextColor, [255, 255, 255]);
-          const badgeBodyTxt = stripHtml(el.badgeBody || cleanText);
-
-          doc.setFillColor(pillFill[0], pillFill[1], pillFill[2]);
-          doc.roundedRect(elX, elY, Math.min(elW, 120), 18, 9, 9, 'F');
-          
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(8.5);
-          doc.setTextColor(pillText[0], pillText[1], pillText[2]);
-          doc.text(el.badgeText || '[Standard]', elX + 8, elY + 12);
-
+          const pillTextColor = hexToRgb(el.badgeTextColor, [255, 255, 255]);
+          const badgeBodyText = stripHtml(el.badgeBody || cleanText);
+          const badgeLayout = getBadgeLayout(el, pg);
+          const badgeAlign = getBadgeAlign(el, badgeLayout);
+          const pillLabel = el.badgeText || '[Standard]';
+          const pillTextW = Math.min(elW, Math.max(48, doc.getTextWidth(pillLabel) + 16));
+          const pillH = Math.min(elH, 18);
+          const bodyX = badgeLayout === 'vertical' ? elX + 4 : elX + pillTextW + 12;
+          const bodyW = badgeLayout === 'vertical' ? elW - 8 : elW - (bodyX - elX) - 4;
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(fontSize);
-          if (textRgb) doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
-          const bodyLines = doc.splitTextToSize(badgeBodyTxt, Math.max(15, elW - 10));
-          doc.text(bodyLines, elX + 4, elY + 28);
+          const bodyLines = badgeBodyText ? doc.splitTextToSize(badgeBodyText, Math.max(15, bodyW)) : [];
+          const lineHeight = fontSize * 1.15;
+          const bodyHeight = bodyLines.length * lineHeight;
+          const groupHeight = badgeLayout === 'vertical'
+            ? pillH + (bodyLines.length ? 6 + bodyHeight : 0)
+            : Math.max(pillH, bodyHeight);
+          const verticalAlign = getVerticalAlign(el);
+          const groupY = verticalAlign === 'center'
+            ? elY + (elH - groupHeight) / 2
+            : (verticalAlign === 'bottom' ? elY + elH - groupHeight : elY);
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          const pillW = Math.min(elW, Math.max(48, doc.getTextWidth(pillLabel) + 16));
+          const pillX = badgeLayout === 'vertical' && badgeAlign === 'center'
+            ? elX + (elW - pillW) / 2
+            : (badgeLayout === 'vertical' && badgeAlign === 'end' ? elX + elW - pillW : elX);
+          const pillY = badgeLayout === 'horizontal' && badgeAlign === 'center'
+            ? groupY + (groupHeight - pillH) / 2
+            : (badgeLayout === 'horizontal' && badgeAlign === 'end' ? groupY + groupHeight - pillH : groupY);
+
+          doc.setFillColor(pillFill[0], pillFill[1], pillFill[2]);
+          doc.roundedRect(pillX, pillY, pillW, pillH, 9, 9, 'F');
+          doc.setTextColor(pillTextColor[0], pillTextColor[1], pillTextColor[2]);
+          doc.text(pillLabel, pillX + 8, pillY + 12, { maxWidth: Math.max(10, pillW - 16) });
+
+          if (bodyLines.length) {
+            const bodyY = badgeLayout === 'vertical' ? pillY + pillH + 6 + fontSize : groupY + fontSize;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(fontSize);
+            if (textRgb) doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
+            doc.text(bodyLines, bodyX, bodyY);
+          }
         } else if (el.type === 'accordion') {
           const titleRgb = hexToRgb(el.headerTextColor, [255, 255, 255]);
           const hdrFill = hexToRgb(el.fill, [226, 232, 240]);
@@ -9264,6 +11255,7 @@ ${pagesMarkup}
   setupCanvasTouchGestures();
   setupCropStageListeners();
   if (!loadWorkingLayout()) loadPreset('ebook');
+  loadPageBlueprintFromUrl();
 </script>
 </body>
 </html>
